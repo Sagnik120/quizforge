@@ -38,3 +38,18 @@ Click **Authorize** above and paste: `Bearer <your_token>`
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.BACKEND_CORS_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Register routers
+PREFIX = settings.API_V1_STR
+app.include_router(auth_router, prefix=PREFIX)
+app.include_router(subjects_router, prefix=PREFIX)
+app.include_router(tests_router, prefix=PREFIX)
+app.include_router(attempts_router, prefix=PREFIX)
+app.include_router(analytics_router, prefix=PREFIX)
+app.include_router(leaderboard_router, prefix=PREFIX)
+app.include_router(profile_router, prefix=PREFIX)
+app.include_router(planner_router, prefix=PREFIX)
