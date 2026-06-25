@@ -33,3 +33,58 @@ async def register(payload: UserCreate, db: AsyncSession = Depends(get_db)):
         full_name=payload.full_name,
         hashed_password=get_password_hash(payload.password),
     )
+    db.add(user)
+    await db.commit()
+    await db.refresh(user)
+
+    token = create_access_token(user.id)
+    return Token(access_token=token, user=UserResponse.model_validate(user))
+
+
+@router.post("/login", response_model=Token)
+async def login(payload: LoginRequest, db: AsyncSession = Depends(get_db)):
+    """Login with email and password."""
+    result = await db.execute(select(User).where(User.email == payload.email))
+    user = result.scalar_one_or_none()
+
+    if not user or not verify_password(payload.password, user.hashed_password):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid email or password",
+        )
+    token = create_access_token(user.id)
+    return Token(access_token=token, user=UserResponse.model_validate(user))
+
+
+class QuickLogin(BaseModel):
+    username: str
+    passcode: str = ""
+
+
+def _people():
+    return [name.lower() for name in settings.USERS]
+
+
+@router.get("/users")
+async def list_people(db: AsyncSession = Depends(get_db)):
+    """The people who can enter with one click, for the landing screen."""
+    result = await db.execute(select(User).where(func.lower(User.username).in_(_people())).order_by(User.username))
+    return {
+        "passcode_required": bool(settings.APP_PASSCODE),
+        "users": [{"username": u.username, "full_name": u.full_name or u.username} for u in result.scalars().all()],
+    }
+
+
+@router.post("/quick-login", response_model=Token)
+async def quick_login(payload: QuickLogin, db: AsyncSession = Depends(get_db)):
+    """One-click entry for the configured people, guarded by the optional shared passcode."""
+    if settings.APP_PASSCODE and not secrets.compare_digest(payload.passcode, settings.APP_PASSCODE):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Wrong passcode")
+    username = payload.username.lower()
+    if username not in _people():
+        raise HTTPException(status_code=404, detail="Unknown user")
+    result = await db.execute(select(User).where(func.lower(User.username) == username))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail="Unknown user")
+    return Token(access_token=create_access_token(user.id), user=UserResponse.model_validate(user))
