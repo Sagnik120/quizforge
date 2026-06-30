@@ -38,3 +38,28 @@ async def create_subject(
     # Eagerly load topics (empty list for new subject)
     await db.execute(
         select(Subject)
+        .where(Subject.id == subject.id)
+        .options(selectinload(Subject.topics))
+    )
+    result = await db.execute(
+        select(Subject).where(Subject.id == subject.id).options(selectinload(Subject.topics))
+    )
+    return result.scalar_one()
+
+
+@router.put("/{subject_id}", response_model=SubjectResponse)
+async def update_subject(
+    subject_id: str,
+    payload: SubjectCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    result = await db.execute(
+        select(Subject)
+        .where(Subject.id == subject_id, can_access(current_user))
+        .options(selectinload(Subject.topics))
+    )
+    subject = result.scalar_one_or_none()
+    if not subject:
+        raise HTTPException(status_code=404, detail="Subject not found")
+    for k, v in payload.model_dump().items():
