@@ -83,3 +83,23 @@ async def delete_subject(
     subject = result.scalar_one_or_none()
     if not subject:
         raise HTTPException(status_code=404, detail="Subject not found")
+    await db.delete(subject)
+    await db.commit()
+
+
+# ─── Topics ────────────────────────────────────────────────
+
+@router.post("/{subject_id}/topics", response_model=TopicResponse, status_code=201)
+async def create_topic(
+    subject_id: str,
+    payload: TopicCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    result = await db.execute(
+        select(Subject).where(Subject.id == subject_id, can_access(current_user))
+    )
+    if not result.scalar_one_or_none():
+        raise HTTPException(status_code=404, detail="Subject not found")
+    if payload.parent_id:
+        parent = await db.execute(
