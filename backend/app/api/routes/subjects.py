@@ -63,3 +63,23 @@ async def update_subject(
     if not subject:
         raise HTTPException(status_code=404, detail="Subject not found")
     for k, v in payload.model_dump().items():
+        setattr(subject, k, v)
+    await db.commit()
+    result = await db.execute(
+        select(Subject).where(Subject.id == subject_id).options(selectinload(Subject.topics))
+    )
+    return result.scalar_one()
+
+
+@router.delete("/{subject_id}", status_code=204)
+async def delete_subject(
+    subject_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    result = await db.execute(
+        select(Subject).where(Subject.id == subject_id, can_access(current_user))
+    )
+    subject = result.scalar_one_or_none()
+    if not subject:
+        raise HTTPException(status_code=404, detail="Subject not found")
