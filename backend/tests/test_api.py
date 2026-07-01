@@ -73,3 +73,33 @@ async def test_create_topic(client, auth_headers):
     assert res.status_code == 201
     assert res.json()["name"] == "Algebra"
 
+
+# ─── Test creation tests ──────────────────────────────────
+@pytest.mark.asyncio
+async def test_create_test(client, auth_headers):
+    # Setup
+    sub = await client.post(f"{BASE}/subjects/", json={"name": "Chemistry"}, headers=auth_headers)
+    sub_id = sub.json()["id"]
+    topic = await client.post(f"{BASE}/subjects/{sub_id}/topics", json={"name": "Organic"}, headers=auth_headers)
+    topic_id = topic.json()["id"]
+
+    res = await client.post(f"{BASE}/tests/", json={
+        "name": "Organic Chemistry Test",
+        "topic_id": topic_id,
+        "questions": [
+            {
+                "question_type": "MCQ",
+                "text": "What is the formula of methane?",
+                "options": [
+                    {"id": "a", "text": "CH4", "is_correct": True},
+                    {"id": "b", "text": "C2H6", "is_correct": False},
+                    {"id": "c", "text": "C3H8", "is_correct": False},
+                    {"id": "d", "text": "C4H10", "is_correct": False},
+                ],
+                "marks": 2,
+                "negative_marks": 0,
+            }
+        ],
+    }, headers=auth_headers)
+    assert res.status_code == 201
+    data = res.json()
