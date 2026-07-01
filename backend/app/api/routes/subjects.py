@@ -103,3 +103,23 @@ async def create_topic(
         raise HTTPException(status_code=404, detail="Subject not found")
     if payload.parent_id:
         parent = await db.execute(
+            select(Topic).where(Topic.id == payload.parent_id, Topic.subject_id == subject_id)
+        )
+        parent = parent.scalar_one_or_none()
+        if not parent or parent.parent_id:
+            raise HTTPException(status_code=400, detail="Sub-topics can only be added under a top-level topic")
+    topic = Topic(**payload.model_dump(), subject_id=subject_id)
+    db.add(topic)
+    await db.commit()
+    await db.refresh(topic)
+    return topic
+
+
+@router.put("/{subject_id}/topics/{topic_id}", response_model=TopicResponse)
+async def update_topic(
+    subject_id: str,
+    topic_id: str,
+    payload: TopicCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
