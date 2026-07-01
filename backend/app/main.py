@@ -53,3 +53,13 @@ app.include_router(analytics_router, prefix=PREFIX)
 app.include_router(leaderboard_router, prefix=PREFIX)
 app.include_router(profile_router, prefix=PREFIX)
 app.include_router(planner_router, prefix=PREFIX)
+
+
+@app.on_event("startup")
+async def startup():
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+        await conn.run_sync(_add_missing_columns)
+    await _seed_people()
+
+
