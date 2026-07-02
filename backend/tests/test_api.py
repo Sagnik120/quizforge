@@ -103,3 +103,28 @@ async def test_create_test(client, auth_headers):
     }, headers=auth_headers)
     assert res.status_code == 201
     data = res.json()
+    assert data["name"] == "Organic Chemistry Test"
+    assert len(data["questions"]) == 1
+
+
+@pytest.mark.asyncio
+async def test_example_json(client, auth_headers):
+    res = await client.get(f"{BASE}/tests/example-json", headers=auth_headers)
+    assert res.status_code == 200
+    assert "questions" in res.json()
+
+
+# ─── Attempt tests ────────────────────────────────────────
+@pytest.mark.asyncio
+async def test_full_attempt_flow(client, auth_headers):
+    """Full: create subject → topic → test → start attempt → submit → get result."""
+    sub = await client.post(f"{BASE}/subjects/", json={"name": "Biology"}, headers=auth_headers)
+    topic = await client.post(f"{BASE}/subjects/{sub.json()['id']}/topics", json={"name": "Cells"}, headers=auth_headers)
+
+    test = await client.post(f"{BASE}/tests/", json={
+        "name": "Cell Biology",
+        "topic_id": topic.json()["id"],
+        "questions": [
+            {
+                "question_type": "MCQ",
+                "text": "What is the powerhouse of the cell?",
