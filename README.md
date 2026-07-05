@@ -43,3 +43,38 @@ API docs at: **http://localhost:8000/docs**
 ### Frontend
 
 ```bash
+cd frontend
+
+npm install
+
+cp .env.local.example .env.local  # Already set for local dev
+
+npm run dev
+```
+
+App at: **http://localhost:3000**
+
+---
+
+## Database
+
+### Using SQLite (default, zero config)
+The default `.env` uses SQLite. No setup needed — the file `quizforge.db` is created automatically.
+
+### Switching to PostgreSQL
+1. Start PostgreSQL (or use Docker: `docker run -e POSTGRES_PASSWORD=password -p 5432:5432 postgres:16`)
+2. Edit `backend/.env`:
+   ```
+   DATABASE_URL=postgresql+asyncpg://postgres:password@localhost:5432/quizforge
+   ```
+3. Run `alembic upgrade head`
+
+### Alembic Migrations
+
+```bash
+cd backend
+
+# Apply all migrations
+alembic upgrade head
+
+# Create a new migration after changing models
