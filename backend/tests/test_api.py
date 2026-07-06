@@ -128,3 +128,18 @@ async def test_full_attempt_flow(client, auth_headers):
             {
                 "question_type": "MCQ",
                 "text": "What is the powerhouse of the cell?",
+                "options": [
+                    {"id": "a", "text": "Mitochondria", "is_correct": True},
+                    {"id": "b", "text": "Nucleus", "is_correct": False},
+                    {"id": "c", "text": "Ribosome", "is_correct": False},
+                    {"id": "d", "text": "Golgi body", "is_correct": False},
+                ],
+                "marks": 1, "negative_marks": 0,
+            }
+        ],
+    }, headers=auth_headers)
+
+    test_id = test.json()["id"]
+
+    # Start attempt
+    start = await client.post(f"{BASE}/attempts/start", json={"test_id": test_id}, headers=auth_headers)
