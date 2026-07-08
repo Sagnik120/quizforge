@@ -38,3 +38,38 @@ class QuestionCreate(QuestionBase):
 
 class QuestionResponse(QuestionBase):
     id: str
+    test_id: str
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class QuestionPublic(BaseModel):
+    """Question without revealing correct answers — used during test attempt"""
+    id: str
+    question_type: QuestionType
+    text: str
+    options: List[dict]   # options without is_correct field
+    marks: int
+    negative_marks: int
+    order_index: int
+
+
+class TestBase(BaseModel):
+    name: str
+    description: Optional[str] = None
+    topic_id: str
+    time_limit_minutes: Optional[int] = None
+
+
+class TestCreate(TestBase):
+    questions: List[QuestionCreate] = []
+
+
+class TestImportJSON(BaseModel):
+    """Schema for importing test from JSON file"""
+    name: str
+    description: Optional[str] = None
+    topic_id: str
+    time_limit_minutes: Optional[int] = None
