@@ -38,3 +38,12 @@ class Question(Base):
     question_type = Column(SAEnum(QuestionType), nullable=False)
     text = Column(Text, nullable=False)
     options = Column(JSON, nullable=False)  # [{"id": "a", "text": "...", "is_correct": bool}]
+    explanation = Column(Text, nullable=True)
+    marks = Column(Integer, default=1)
+    negative_marks = Column(Integer, default=0)
+    order_index = Column(Integer, default=0)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    test = relationship("Test", back_populates="questions")
+    attempt_answers = relationship("AttemptAnswer", back_populates="question", cascade="all, delete-orphan")
+    revision_entries = relationship("RevisionQueue", back_populates="question", cascade="all, delete-orphan")
