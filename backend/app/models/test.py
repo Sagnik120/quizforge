@@ -20,3 +20,21 @@ class Test(Base):
     topic_id = Column(String(36), ForeignKey("topics.id"), nullable=False)
     creator_id = Column(String(36), ForeignKey("users.id"), nullable=False)
     time_limit_minutes = Column(Integer, nullable=True)  # None = no limit
+    is_published = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    topic = relationship("Topic", back_populates="tests")
+    creator = relationship("User", back_populates="tests")
+    questions = relationship("Question", back_populates="test", cascade="all, delete-orphan", order_by="Question.order_index")
+    attempts = relationship("Attempt", back_populates="test", cascade="all, delete-orphan")
+
+
+class Question(Base):
+    __tablename__ = "questions"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    test_id = Column(String(36), ForeignKey("tests.id"), nullable=False)
+    question_type = Column(SAEnum(QuestionType), nullable=False)
+    text = Column(Text, nullable=False)
+    options = Column(JSON, nullable=False)  # [{"id": "a", "text": "...", "is_correct": bool}]
