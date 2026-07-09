@@ -88,3 +88,33 @@ async def list_tests(
             "total_questions": len(test.questions),
             "total_marks": sum(q.marks for q in test.questions),
             "time_limit_minutes": test.time_limit_minutes,
+            "attempt_count": len(mine),
+            "best_percentage": best,
+            "last_percentage": round(mine[-1], 1) if mine else None,
+            "needs_retry": best is not None and best < RETRY_BELOW,
+            "partner_attempt_count": len(others),
+            "partner_best_percentage": _pct(others),
+            "created_at": test.created_at,
+        })
+    return summaries
+
+
+async def _save_test(payload, db: AsyncSession, current_user: User):
+    topic_result = await db.execute(
+        select(Topic).join(Subject).where(
+            Topic.id == payload.topic_id, can_access(current_user)
+        )
+    )
+    if not topic_result.scalar_one_or_none():
+        raise HTTPException(status_code=404, detail="Topic not found")
+
+    test = Test(
+        name=payload.name,
+        description=payload.description,
+        topic_id=payload.topic_id,
+        creator_id=current_user.id,
+        time_limit_minutes=payload.time_limit_minutes,
+    )
+    db.add(test)
+    await db.flush()
+
