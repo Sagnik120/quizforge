@@ -48,3 +48,43 @@ async def list_tests(
     )
     if topic_id:
         query = query.where(Test.topic_id == topic_id)
+    if subject_id:
+        query = query.where(Topic.subject_id == subject_id)
+    if space:
+        query = query.where(Subject.space == space)
+    tests = (await db.execute(query)).scalars().all()
+
+    # All completed attempts on these tests, oldest first, grouped per (test, user)
+    stats = {}
+    if tests:
+        rows = await db.execute(
+            select(Attempt.test_id, Attempt.user_id, Attempt.percentage)
+            .where(
+                Attempt.test_id.in_([t.id for t in tests]),
+                Attempt.status == AttemptStatus.COMPLETED,
+            )
+            .order_by(Attempt.completed_at)
+        )
+        for test_id, user_id, pct in rows.all():
+            stats.setdefault(test_id, {}).setdefault(user_id, []).append(pct or 0)
+
+    summaries = []
+    for test in tests:
+        per_user = stats.get(test.id, {})
+        mine = per_user.get(current_user.id, [])
+        others = [p for uid, ps in per_user.items() if uid != current_user.id for p in ps]
+        best = _pct(mine)
+        summaries.append({
+            "id": test.id,
+            "name": test.name,
+            "description": test.description,
+            "topic_id": test.topic_id,
+            "topic_name": test.topic.name,
+            "subject_id": test.topic.subject_id,
+            "subject_name": test.topic.subject.name,
+            "space": test.topic.subject.space,
+            "creator_id": test.creator_id,
+            "creator_name": test.creator.full_name or test.creator.username,
+            "total_questions": len(test.questions),
+            "total_marks": sum(q.marks for q in test.questions),
+            "time_limit_minutes": test.time_limit_minutes,
