@@ -73,3 +73,34 @@ class TestImportJSON(BaseModel):
     description: Optional[str] = None
     topic_id: str
     time_limit_minutes: Optional[int] = None
+    questions: List[QuestionCreate]
+
+
+class TestResponse(TestBase):
+    id: str
+    creator_id: str
+    is_published: bool
+    created_at: datetime
+    updated_at: datetime
+    questions: List[QuestionResponse] = []
+    total_questions: int = 0
+    total_marks: int = 0
+
+    class Config:
+        from_attributes = True
+
+
+class TestSummary(BaseModel):
+    id: str
+    name: str
+    description: Optional[str] = None
+    topic_id: str
+    total_questions: int
+    total_marks: int
+    time_limit_minutes: Optional[int] = None
+    attempt_count: int = 0
+    best_percentage: Optional[float] = None
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
