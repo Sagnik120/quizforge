@@ -118,3 +118,33 @@ async def _save_test(payload, db: AsyncSession, current_user: User):
     db.add(test)
     await db.flush()
 
+    for i, q_data in enumerate(payload.questions):
+        q_dict = q_data.model_dump()
+        q_dict["order_index"] = i
+        db.add(Question(test_id=test.id, **q_dict))
+
+    await db.commit()
+    result = await db.execute(
+        select(Test).where(Test.id == test.id).options(selectinload(Test.questions))
+    )
+    return result.scalar_one()
+
+
+@router.post("/", response_model=TestResponse, status_code=201)
+async def create_test(
+    payload: TestCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Create a new test with questions (used by the form and by pasted JSON)."""
+    return await _save_test(payload, db, current_user)
+
+
+@router.post("/import-json", response_model=TestResponse, status_code=201)
+async def import_test_from_json(
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Import a test from a JSON file. See /api/v1/tests/example-json for the format."""
+    content = await file.read()
