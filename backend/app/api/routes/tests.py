@@ -218,3 +218,23 @@ async def get_test_for_attempt(
 ):
     """Get test questions without revealing correct answers (for attempt mode)."""
     result = await db.execute(select(Test).join(Topic).join(Subject).where(Test.id == test_id, can_access(current_user)))
+    test = result.scalar_one_or_none()
+    if not test:
+        raise HTTPException(status_code=404, detail="Test not found")
+
+    q_result = await db.execute(
+        select(Question).where(Question.test_id == test_id).order_by(Question.order_index)
+    )
+    questions = q_result.scalars().all()
+    public_questions = [
+        {
+            "id": q.id,
+            "question_type": q.question_type,
+            "text": q.text,
+            "options": [{"id": o["id"], "text": o["text"]} for o in q.options],
+            "marks": q.marks,
+            "negative_marks": q.negative_marks,
+            "order_index": q.order_index,
+        }
+        for q in questions
+    ]
