@@ -148,3 +148,33 @@ async def import_test_from_json(
 ):
     """Import a test from a JSON file. See /api/v1/tests/example-json for the format."""
     content = await file.read()
+    try:
+        payload = TestImportJSON(**json.loads(content))
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Invalid JSON format: {str(e)}")
+    return await _save_test(payload, db, current_user)
+
+
+@router.get("/example-json")
+async def get_example_json():
+    """Returns example JSON format for test import."""
+    return {
+        "name": "Sample Physics Test",
+        "description": "Test on Newton's Laws",
+        "topic_id": "<your-topic-uuid>",
+        "time_limit_minutes": 30,
+        "questions": [
+            {
+                "question_type": "MCQ",
+                "text": "Which of Newton's laws states that F = ma?",
+                "options": [
+                    {"id": "a", "text": "First Law", "is_correct": False},
+                    {"id": "b", "text": "Second Law", "is_correct": True},
+                    {"id": "c", "text": "Third Law", "is_correct": False},
+                    {"id": "d", "text": "Law of Gravitation", "is_correct": False}
+                ],
+                "explanation": "Newton's Second Law states F = ma",
+                "marks": 2,
+                "negative_marks": 0
+            },
+            {
