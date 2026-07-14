@@ -238,3 +238,18 @@ async def get_test_for_attempt(
         }
         for q in questions
     ]
+    return {
+        "id": test.id,
+        "name": test.name,
+        "description": test.description,
+        "time_limit_minutes": test.time_limit_minutes,
+        "total_questions": len(questions),
+        "total_marks": sum(q.marks for q in questions),
+        "questions": public_questions,
+    }
+
+
+@router.delete("/{test_id}", status_code=204)
+async def delete_test(
+    test_id: str,
+    db: AsyncSession = Depends(get_db),
