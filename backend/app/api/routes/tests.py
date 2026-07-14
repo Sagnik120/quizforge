@@ -178,3 +178,43 @@ async def get_example_json():
                 "negative_marks": 0
             },
             {
+                "question_type": "MSQ",
+                "text": "Which are scalar quantities?",
+                "options": [
+                    {"id": "a", "text": "Speed", "is_correct": True},
+                    {"id": "b", "text": "Velocity", "is_correct": False},
+                    {"id": "c", "text": "Mass", "is_correct": True},
+                    {"id": "d", "text": "Force", "is_correct": False}
+                ],
+                "marks": 3,
+                "negative_marks": 1
+            }
+        ]
+    }
+
+
+@router.get("/{test_id}", response_model=TestResponse)
+async def get_test(
+    test_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Get a test with all questions (shows correct answers — for review/edit)."""
+    result = await db.execute(
+        select(Test).join(Topic).join(Subject).where(Test.id == test_id, can_access(current_user))
+        .options(selectinload(Test.questions))
+    )
+    test = result.scalar_one_or_none()
+    if not test:
+        raise HTTPException(status_code=404, detail="Test not found")
+    return test
+
+
+@router.get("/{test_id}/attempt-view", response_model=dict)
+async def get_test_for_attempt(
+    test_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Get test questions without revealing correct answers (for attempt mode)."""
+    result = await db.execute(select(Test).join(Topic).join(Subject).where(Test.id == test_id, can_access(current_user)))
