@@ -253,3 +253,34 @@ async def get_test_for_attempt(
 async def delete_test(
     test_id: str,
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    from sqlalchemy import delete as sql_delete
+    from app.models.attempt import Attempt, AttemptAnswer, RevisionQueue
+
+    result = await db.execute(
+        select(Test).join(Topic).join(Subject).where(Test.id == test_id, can_access(current_user))
+    )
+    test = result.scalar_one_or_none()
+    if not test:
+        raise HTTPException(status_code=404, detail="Test not found")
+
+    # Get all question IDs for this test
+    q_result = await db.execute(select(Question).where(Question.test_id == test_id))
+    question_ids = [q.id for q in q_result.scalars().all()]
+
+    if question_ids:
+        # Delete revision_queue rows referencing these questions
+        await db.execute(
+            sql_delete(RevisionQueue).where(RevisionQueue.question_id.in_(question_ids))
+        )
+        # Delete attempt_answers referencing these questions
+        await db.execute(
+            sql_delete(AttemptAnswer).where(AttemptAnswer.question_id.in_(question_ids))
+        )
+
+    # Delete attempts for this test
+    await db.execute(sql_delete(Attempt).where(Attempt.test_id == test_id))
+
+    await db.delete(test)
+    await db.commit()
