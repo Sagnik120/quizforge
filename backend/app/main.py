@@ -63,3 +63,13 @@ async def startup():
     await _seed_people()
 
 
+# Columns added after the first release; create_all never alters existing tables.
+_NEW_COLUMNS = [
+    ("subjects", "space", "VARCHAR(10) NOT NULL DEFAULT 'private'"),
+    ("topics", "parent_id", "VARCHAR(36)"),
+]
+
+
+def _add_missing_columns(conn):
+    inspector = inspect(conn)
+    for table, column, ddl in _NEW_COLUMNS:
