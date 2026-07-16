@@ -168,3 +168,23 @@ async def test_revision_queue_populated(client, auth_headers):
     # Just verify the endpoint works
     res = await client.get(f"{BASE}/analytics/revision-queue", headers=auth_headers)
     assert res.status_code == 200
+    assert isinstance(res.json(), list)
+
+
+# ─── Profile tests ────────────────────────────────────────
+@pytest.mark.asyncio
+async def test_get_profile(client, auth_headers):
+    res = await client.get(f"{BASE}/profile/", headers=auth_headers)
+    assert res.status_code == 200
+    assert "email" in res.json()
+
+
+@pytest.mark.asyncio
+async def test_update_profile(client, auth_headers):
+    res = await client.put(f"{BASE}/profile/", json={
+        "full_name": "Updated Name",
+        "bio": "I love quizzes",
+        "institution": "IIT Delhi",
+    }, headers=auth_headers)
+    assert res.status_code == 200
+    assert res.json()["full_name"] == "Updated Name"
