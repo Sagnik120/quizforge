@@ -188,3 +188,18 @@ async def test_update_profile(client, auth_headers):
     }, headers=auth_headers)
     assert res.status_code == 200
     assert res.json()["full_name"] == "Updated Name"
+
+
+@pytest.mark.asyncio
+async def test_analytics_summary(client, auth_headers):
+    res = await client.get(f"{BASE}/analytics/summary", headers=auth_headers)
+    assert res.status_code == 200
+    data = res.json()
+    assert "total_attempts" in data
+    assert "current_streak" in data
+
+
+@pytest.mark.asyncio
+async def test_leaderboard(client, auth_headers):
+    res = await client.get(f"{BASE}/leaderboard/", headers=auth_headers)
+    assert res.status_code == 200
