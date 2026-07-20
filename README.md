@@ -78,3 +78,38 @@ cd backend
 alembic upgrade head
 
 # Create a new migration after changing models
+alembic revision --autogenerate -m "add new column"
+
+# Roll back one step
+alembic downgrade -1
+```
+
+---
+
+## Backend API Testing
+
+```bash
+cd backend
+source venv/bin/activate
+
+# Run all tests
+pytest tests/ -v
+
+# Run a specific test
+pytest tests/test_api.py::test_full_attempt_flow -v
+
+# With coverage
+pip install pytest-cov
+pytest tests/ -v --cov=app --cov-report=html
+```
+
+### Swagger UI Testing
+1. Go to http://localhost:8000/docs
+2. Click **POST /api/v1/auth/register** → fill in email/username/password → Execute
+3. Copy the `access_token` from the response
+4. Click **Authorize** (top right) → paste `Bearer <token>` → Authorize
+5. All endpoints are now unlocked — try creating subjects, tests, and attempting them
+
+---
+
+## Git Workflow
