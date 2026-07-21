@@ -23,3 +23,23 @@ class Attempt(Base):
     max_score = Column(Float, nullable=True)      # maximum possible score
     percentage = Column(Float, nullable=True)     # 0-100
     time_taken_seconds = Column(Integer, nullable=True)
+    started_at = Column(DateTime, default=datetime.utcnow)
+    completed_at = Column(DateTime, nullable=True)
+
+    test = relationship("Test", back_populates="attempts")
+    user = relationship("User", back_populates="attempts")
+    answers = relationship("AttemptAnswer", back_populates="attempt", cascade="all, delete-orphan")
+
+
+class AttemptAnswer(Base):
+    __tablename__ = "attempt_answers"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    attempt_id = Column(String(36), ForeignKey("attempts.id"), nullable=False)
+    question_id = Column(String(36), ForeignKey("questions.id"), nullable=False)
+    selected_options = Column(JSON, nullable=False)  # list of option ids e.g. ["a", "c"]
+    is_correct = Column(Boolean, nullable=True)
+    marks_awarded = Column(Float, default=0)
+    time_spent_seconds = Column(Integer, nullable=True)
+
+    attempt = relationship("Attempt", back_populates="answers")
