@@ -43,3 +43,19 @@ class AttemptAnswer(Base):
     time_spent_seconds = Column(Integer, nullable=True)
 
     attempt = relationship("Attempt", back_populates="answers")
+    question = relationship("Question", back_populates="attempt_answers")
+
+
+class RevisionQueue(Base):
+    __tablename__ = "revision_queue"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(String(36), ForeignKey("users.id"), nullable=False)
+    question_id = Column(String(36), ForeignKey("questions.id"), nullable=False)
+    wrong_count = Column(Integer, default=1)       # times answered wrong
+    last_wrong_at = Column(DateTime, default=datetime.utcnow)
+    is_resolved = Column(Boolean, default=False)   # marked as understood
+    added_at = Column(DateTime, default=datetime.utcnow)
+
+    user = relationship("User", back_populates="revision_queue")
+    question = relationship("Question", back_populates="revision_entries")
