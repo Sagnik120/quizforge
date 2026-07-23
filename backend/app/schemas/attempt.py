@@ -58,3 +58,29 @@ class AttemptSummary(BaseModel):
 
 
 class RevisionItem(BaseModel):
+    id: str
+    question_id: str
+    question_text: str
+    question_type: str
+    test_name: str
+    topic_name: str
+    subject_name: str
+    wrong_count: int
+    last_wrong_at: datetime
+    is_resolved: bool
+
+    class Config:
+        from_attributes = True
+
+
+class AnalyticsSummary(BaseModel):
+    total_attempts: int
+    total_tests_attempted: int
+    average_percentage: float
+    best_percentage: float
+    total_time_spent_hours: float
+    current_streak: int
+    longest_streak: int
+    weak_topics: List[dict]       # topic_name, avg_score
+    recent_performance: List[dict]  # date, percentage (last 30 days)
+    accuracy_by_question_type: dict  # MCQ: %, MSQ: %
