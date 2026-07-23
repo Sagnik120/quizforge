@@ -33,3 +33,28 @@ class AttemptResult(BaseModel):
     test_name: str
     score: float
     max_score: float
+    percentage: float
+    correct_count: int
+    wrong_count: int
+    unattempted_count: int
+    time_taken_seconds: Optional[int]
+    completed_at: datetime
+    answers: List[AnswerResult]
+
+
+class AttemptSummary(BaseModel):
+    id: str
+    test_id: str
+    test_name: str
+    score: float
+    max_score: float
+    percentage: float
+    status: AttemptStatus
+    started_at: datetime
+    completed_at: Optional[datetime]
+
+    class Config:
+        from_attributes = True
+
+
+class RevisionItem(BaseModel):
