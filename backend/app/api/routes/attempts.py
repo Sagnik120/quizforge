@@ -108,3 +108,33 @@ async def submit_attempt(
         # Add to revision queue if wrong
         if not is_correct and selected:
             existing = await db.execute(
+                select(RevisionQueue).where(
+                    RevisionQueue.user_id == current_user.id,
+                    RevisionQueue.question_id == q.id,
+                )
+            )
+            rq = existing.scalar_one_or_none()
+            if rq:
+                rq.wrong_count += 1
+                rq.last_wrong_at = datetime.utcnow()
+                rq.is_resolved = False
+            else:
+                db.add(RevisionQueue(
+                    user_id=current_user.id,
+                    question_id=q.id,
+                ))
+
+        answer_results.append(AnswerResult(
+            question_id=q.id,
+            selected_options=list(selected),
+            correct_options=list(correct_options),
+            is_correct=is_correct,
+            marks_awarded=marks,
+            explanation=q.explanation,
+        ))
+
+    unattempted_count = len(questions) - len(answered_ids)
+    percentage = (total_score / max_score * 100) if max_score > 0 else 0
+    completed_at = datetime.utcnow()
+    time_taken = int((completed_at - attempt.started_at).total_seconds())
+
