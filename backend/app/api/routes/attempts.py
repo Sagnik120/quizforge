@@ -48,3 +48,33 @@ async def submit_attempt(
     attempt_id: str,
     payload: AttemptSubmit,
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Submit answers for an attempt and get scored results."""
+    result = await db.execute(
+        select(Attempt).where(
+            Attempt.id == attempt_id,
+            Attempt.user_id == current_user.id
+        )
+    )
+    attempt = result.scalar_one_or_none()
+    if not attempt:
+        raise HTTPException(status_code=404, detail="Attempt not found")
+    if attempt.status != AttemptStatus.IN_PROGRESS:
+        raise HTTPException(status_code=400, detail="Attempt already completed")
+
+    # Load test questions
+    q_result = await db.execute(
+        select(Question).where(Question.test_id == attempt.test_id)
+    )
+    questions = {q.id: q for q in q_result.scalars().all()}
+
+    total_score = 0.0
+    max_score = sum(q.marks for q in questions.values())
+    answer_results = []
+    correct_count = 0
+    wrong_count = 0
+    answered_ids = set()
+
+    for ans in payload.answers:
+        q = questions.get(ans.question_id)
