@@ -78,3 +78,33 @@ async def submit_attempt(
 
     for ans in payload.answers:
         q = questions.get(ans.question_id)
+        if not q:
+            continue
+        answered_ids.add(ans.question_id)
+        correct_options = {o["id"] for o in q.options if o["is_correct"]}
+        selected = set(ans.selected_options)
+
+        is_correct = selected == correct_options
+        marks = 0.0
+        if is_correct:
+            marks = q.marks
+            correct_count += 1
+        elif selected:
+            marks = -q.negative_marks
+            wrong_count += 1
+
+        total_score += marks
+
+        # Save answer to DB
+        db.add(AttemptAnswer(
+            attempt_id=attempt_id,
+            question_id=q.id,
+            selected_options=list(selected),
+            is_correct=is_correct,
+            marks_awarded=marks,
+            time_spent_seconds=ans.time_spent_seconds,
+        ))
+
+        # Add to revision queue if wrong
+        if not is_correct and selected:
+            existing = await db.execute(
