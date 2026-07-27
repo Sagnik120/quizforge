@@ -168,3 +168,28 @@ async def submit_attempt(
         answers=answer_results,
     )
 
+
+async def _update_streak(user: User, db: AsyncSession):
+    current, longest = streaks(await activity_days(db, user.id))
+    user.current_streak = current
+    user.longest_streak = max(longest, user.longest_streak or 0)
+    user.last_activity_date = datetime.utcnow()
+
+
+@router.get("/my", response_model=List[AttemptSummary])
+async def my_attempts(
+    test_id: str = None,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """List all completed attempts by the current user."""
+    query = select(Attempt).where(
+        Attempt.user_id == current_user.id,
+        Attempt.status == AttemptStatus.COMPLETED,
+    ).order_by(Attempt.completed_at.desc())
+    if test_id:
+        query = query.where(Attempt.test_id == test_id)
+    result = await db.execute(query)
+    return result.scalars().all()
+
+
