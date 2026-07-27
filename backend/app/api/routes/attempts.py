@@ -218,3 +218,32 @@ async def get_attempt_result(
     for a in answers:
         q_r = await db.execute(select(Question).where(Question.id == a.question_id))
         q = q_r.scalar_one()
+        correct_options = [o["id"] for o in q.options if o["is_correct"]]
+        answer_results.append(AnswerResult(
+            question_id=a.question_id,
+            selected_options=a.selected_options,
+            correct_options=correct_options,
+            is_correct=a.is_correct,
+            marks_awarded=a.marks_awarded,
+            explanation=q.explanation,
+        ))
+
+    test_r = await db.execute(select(Test).where(Test.id == attempt.test_id))
+    test = test_r.scalar_one()
+    correct_count = sum(1 for a in answers if a.is_correct)
+    wrong_count = sum(1 for a in answers if a.is_correct is False)
+
+    return AttemptResult(
+        id=attempt.id,
+        test_id=attempt.test_id,
+        test_name=test.name,
+        score=attempt.score,
+        max_score=attempt.max_score,
+        percentage=attempt.percentage,
+        correct_count=correct_count,
+        wrong_count=wrong_count,
+        unattempted_count=0,
+        time_taken_seconds=attempt.time_taken_seconds,
+        completed_at=attempt.completed_at,
+        answers=answer_results,
+    )
