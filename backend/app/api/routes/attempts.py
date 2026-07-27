@@ -193,3 +193,28 @@ async def my_attempts(
     return result.scalars().all()
 
 
+@router.get("/{attempt_id}/result", response_model=AttemptResult)
+async def get_attempt_result(
+    attempt_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Get the detailed result of a completed attempt."""
+    result = await db.execute(
+        select(Attempt).where(
+            Attempt.id == attempt_id, Attempt.user_id == current_user.id
+        )
+    )
+    attempt = result.scalar_one_or_none()
+    if not attempt:
+        raise HTTPException(status_code=404, detail="Attempt not found")
+
+    # Build answer results
+    ans_result = await db.execute(
+        select(AttemptAnswer).where(AttemptAnswer.attempt_id == attempt_id)
+    )
+    answers = ans_result.scalars().all()
+    answer_results = []
+    for a in answers:
+        q_r = await db.execute(select(Question).where(Question.id == a.question_id))
+        q = q_r.scalar_one()
