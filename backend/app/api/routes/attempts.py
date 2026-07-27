@@ -138,3 +138,33 @@ async def submit_attempt(
     completed_at = datetime.utcnow()
     time_taken = int((completed_at - attempt.started_at).total_seconds())
 
+    attempt.status = AttemptStatus.COMPLETED
+    attempt.score = total_score
+    attempt.max_score = max_score
+    attempt.percentage = percentage
+    attempt.time_taken_seconds = time_taken
+    attempt.completed_at = completed_at
+
+    # Update streak
+    await _update_streak(current_user, db)
+
+    await db.commit()
+
+    test_result = await db.execute(select(Test).where(Test.id == attempt.test_id))
+    test = test_result.scalar_one()
+
+    return AttemptResult(
+        id=attempt.id,
+        test_id=attempt.test_id,
+        test_name=test.name,
+        score=total_score,
+        max_score=max_score,
+        percentage=percentage,
+        correct_count=correct_count,
+        wrong_count=wrong_count,
+        unattempted_count=unattempted_count,
+        time_taken_seconds=time_taken,
+        completed_at=completed_at,
+        answers=answer_results,
+    )
+
