@@ -203,3 +203,18 @@ async def test_analytics_summary(client, auth_headers):
 async def test_leaderboard(client, auth_headers):
     res = await client.get(f"{BASE}/leaderboard/", headers=auth_headers)
     assert res.status_code == 200
+    assert isinstance(res.json(), list)
+
+
+# ─── Spaces, goals, calendar ──────────────────────────────
+
+@pytest.fixture(scope="session")
+async def partner_headers(client):
+    res = await client.post(f"{BASE}/auth/quick-login", json={"username": "shrusti"})
+    return {"Authorization": f"Bearer {res.json()['access_token']}"}
+
+
+QUESTION = {"question_type": "MCQ", "text": "2+2?", "marks": 2, "options": [
+    {"id": "a", "text": "4", "is_correct": True}, {"id": "b", "text": "5", "is_correct": False}]}
+
+
