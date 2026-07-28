@@ -238,3 +238,23 @@ async def test_private_space_is_hidden_from_partner(client, auth_headers, partne
 
 
 @pytest.mark.asyncio
+async def test_common_space_shared_with_per_user_stats(client, auth_headers, partner_headers):
+    s, sub, test = await _subject_with_test(client, auth_headers, "common")
+    q = test["questions"][0]["id"]
+    # partner fails it, so it is flagged for retry only for them
+    a = (await client.post(f"{BASE}/attempts/start", json={"test_id": test["id"]}, headers=partner_headers)).json()
+    r = await client.post(f"{BASE}/attempts/{a['attempt_id']}/submit", json={"answers": [{"question_id": q, "selected_options": ["b"]}]}, headers=partner_headers)
+    assert r.status_code == 200 and r.json()["percentage"] == 0
+
+    theirs = {t["id"]: t for t in (await client.get(f"{BASE}/tests/", params={"space": "common"}, headers=partner_headers)).json()}[test["id"]]
+    assert theirs["attempt_count"] == 1 and theirs["needs_retry"] is True and theirs["creator_id"] != theirs["id"]
+    mine = {t["id"]: t for t in (await client.get(f"{BASE}/tests/", headers=auth_headers)).json()}[test["id"]]
+    assert mine["attempt_count"] == 0 and mine["needs_retry"] is False and mine["partner_attempt_count"] == 1
+
+    weak = (await client.get(f"{BASE}/analytics/weak-areas", headers=partner_headers)).json()
+    subj = next(x for x in weak if x["id"] == s["id"])
+    assert subj["percentage"] == 0 and subj["topics"][0]["subtopics"][0]["id"] == sub["id"]
+    assert subj["topics"][0]["subtopics"][0]["percentage"] == 0
+
+    # deleting the subject removes topics, tests, attempts and revision rows
+    assert (await client.delete(f"{BASE}/subjects/{s['id']}", headers=partner_headers)).status_code == 204
