@@ -73,3 +73,13 @@ _NEW_COLUMNS = [
 def _add_missing_columns(conn):
     inspector = inspect(conn)
     for table, column, ddl in _NEW_COLUMNS:
+        if column not in [c["name"] for c in inspector.get_columns(table)]:
+            conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}"))
+
+
+async def _seed_people():
+    """Make sure every configured person has an account to click into."""
+    async with AsyncSessionLocal() as db:
+        for name in settings.USERS:
+            existing = await db.execute(select(User).where(func.lower(User.username) == name.lower()))
+            if not existing.scalar_one_or_none():
