@@ -218,3 +218,23 @@ QUESTION = {"question_type": "MCQ", "text": "2+2?", "marks": 2, "options": [
     {"id": "a", "text": "4", "is_correct": True}, {"id": "b", "text": "5", "is_correct": False}]}
 
 
+async def _subject_with_test(client, headers, space):
+    s = (await client.post(f"{BASE}/subjects/", json={"name": f"DSA {space}", "space": space}, headers=headers)).json()
+    t = (await client.post(f"{BASE}/subjects/{s['id']}/topics", json={"name": "Arrays"}, headers=headers)).json()
+    sub = await client.post(f"{BASE}/subjects/{s['id']}/topics", json={"name": "Two pointers", "parent_id": t["id"]}, headers=headers)
+    assert sub.status_code == 201 and sub.json()["parent_id"] == t["id"]
+    test = await client.post(f"{BASE}/tests/", json={"name": f"Quiz {space}", "topic_id": sub.json()["id"], "questions": [QUESTION]}, headers=headers)
+    assert test.status_code == 201
+    return s, sub.json(), test.json()
+
+
+@pytest.mark.asyncio
+async def test_private_space_is_hidden_from_partner(client, auth_headers, partner_headers):
+    s, _, test = await _subject_with_test(client, auth_headers, "private")
+    theirs = (await client.get(f"{BASE}/subjects/", headers=partner_headers)).json()
+    assert s["id"] not in [x["id"] for x in theirs]
+    assert (await client.get(f"{BASE}/tests/{test['id']}/attempt-view", headers=partner_headers)).status_code == 404
+    assert (await client.post(f"{BASE}/attempts/start", json={"test_id": test["id"]}, headers=partner_headers)).status_code == 404
+
+
+@pytest.mark.asyncio
