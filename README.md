@@ -113,3 +113,38 @@ pytest tests/ -v --cov=app --cov-report=html
 ---
 
 ## Git Workflow
+
+```bash
+# Initial setup (run once)
+cd quizforge
+git init
+git add .
+git commit -m "feat: initial QuizForge project setup"
+
+# Suggested commit sequence as you work:
+git add backend/app/models/
+git commit -m "feat(models): add User, Subject, Topic, Test, Attempt, RevisionQueue models"
+
+git add backend/app/api/routes/auth.py
+git commit -m "feat(auth): add register and login endpoints with JWT"
+
+git add backend/app/api/routes/subjects.py
+git commit -m "feat(subjects): add CRUD for subjects and topics"
+
+git add backend/app/api/routes/tests.py
+git commit -m "feat(tests): add test creation, JSON import, and attempt-view endpoints"
+
+git add backend/app/api/routes/attempts.py
+git commit -m "feat(attempts): add attempt start, submit with scoring, and revision queue"
+
+git add backend/app/api/routes/analytics.py
+git commit -m "feat(analytics): add performance summary and revision queue endpoints"
+
+git add frontend/src/
+git commit -m "feat(frontend): add Next.js app with auth, subjects, test creation, attempt flow"
+
+git add .
+git commit -m "chore: add Docker Compose and Dockerfiles for deployment"
+```
+
+---
