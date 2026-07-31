@@ -258,3 +258,23 @@ async def test_common_space_shared_with_per_user_stats(client, auth_headers, par
 
     # deleting the subject removes topics, tests, attempts and revision rows
     assert (await client.delete(f"{BASE}/subjects/{s['id']}", headers=partner_headers)).status_code == 204
+
+
+@pytest.mark.asyncio
+async def test_goals_tree_and_progress(client, auth_headers, partner_headers):
+    async def add(title, parent=None, space="common", headers=auth_headers):
+        res = await client.post(f"{BASE}/goals", json={"title": title, "parent_id": parent, "space": space}, headers=headers)
+        return res
+    root = (await add("DBMS")).json()
+    topic = (await add("Normalization", root["id"])).json()
+    l1 = (await add("1NF", topic["id"])).json()
+    l2 = (await add("2NF", topic["id"])).json()
+    assert (await add("too deep", l1["id"])).status_code == 400
+    secret = (await add("My secret goal", space="private")).json()
+
+    assert (await client.post(f"{BASE}/goals/{l1['id']}/toggle", headers=auth_headers)).json()["done"] is True
+    assert (await client.post(f"{BASE}/goals/{root['id']}/toggle", headers=partner_headers)).json()["done"] is True
+
+    theirs = {g["id"]: g for g in (await client.get(f"{BASE}/goals", headers=partner_headers)).json()}
+    assert secret["id"] not in theirs and len(theirs[l2["id"]]["done_by"]) == 1 and len(theirs[l1["id"]]["done_by"]) == 2
+
