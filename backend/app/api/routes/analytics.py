@@ -38,3 +38,28 @@ async def get_analytics_summary(
         )
     )
     total_tests_attempted = unique_tests.scalar() or 0
+
+    # Average and best percentage
+    perf = await db.execute(
+        select(func.avg(Attempt.percentage), func.max(Attempt.percentage)).where(
+            Attempt.user_id == current_user.id,
+            Attempt.status == AttemptStatus.COMPLETED
+        )
+    )
+    avg_pct, best_pct = perf.first() or (0, 0)
+
+    # Total time
+    time_result = await db.execute(
+        select(func.sum(Attempt.time_taken_seconds)).where(
+            Attempt.user_id == current_user.id,
+            Attempt.status == AttemptStatus.COMPLETED
+        )
+    )
+    total_seconds = time_result.scalar() or 0
+    total_hours = round(total_seconds / 3600, 1)
+
+    # Performance last 30 days
+    thirty_days_ago = datetime.utcnow() - timedelta(days=30)
+    recent = await db.execute(
+        select(Attempt.completed_at, Attempt.percentage).where(
+            Attempt.user_id == current_user.id,
