@@ -63,3 +63,23 @@ async def get_analytics_summary(
     recent = await db.execute(
         select(Attempt.completed_at, Attempt.percentage).where(
             Attempt.user_id == current_user.id,
+            Attempt.status == AttemptStatus.COMPLETED,
+            Attempt.completed_at >= thirty_days_ago,
+        ).order_by(Attempt.completed_at)
+    )
+    recent_performance = [
+        {"date": r[0].strftime("%Y-%m-%d"), "percentage": round(r[1], 1)}
+        for r in recent.all() if r[0] and r[1] is not None
+    ]
+
+    # Weak topics (topics where avg score < 60%)
+    weak_topics_result = await db.execute(
+        select(Topic.name, func.avg(Attempt.percentage).label("avg_pct"))
+        .join(Test, Test.topic_id == Topic.id)
+        .join(Attempt, Attempt.test_id == Test.id)
+        .where(
+            Attempt.user_id == current_user.id,
+            Attempt.status == AttemptStatus.COMPLETED,
+        )
+        .group_by(Topic.id, Topic.name)
+        .having(func.avg(Attempt.percentage) < 60)
