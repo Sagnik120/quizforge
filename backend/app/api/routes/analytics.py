@@ -83,3 +83,18 @@ async def get_analytics_summary(
         )
         .group_by(Topic.id, Topic.name)
         .having(func.avg(Attempt.percentage) < 60)
+        .order_by(func.avg(Attempt.percentage))
+        .limit(5)
+    )
+    weak_topics = [
+        {"topic_name": r[0], "avg_score": round(r[1], 1)}
+        for r in weak_topics_result.all()
+    ]
+
+    return AnalyticsSummary(
+        total_attempts=total_attempts,
+        total_tests_attempted=total_tests_attempted,
+        average_percentage=round(avg_pct or 0, 1),
+        best_percentage=round(best_pct or 0, 1),
+        total_time_spent_hours=total_hours,
+        current_streak=current_user.current_streak,
