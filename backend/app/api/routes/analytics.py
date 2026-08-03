@@ -98,3 +98,23 @@ async def get_analytics_summary(
         best_percentage=round(best_pct or 0, 1),
         total_time_spent_hours=total_hours,
         current_streak=current_user.current_streak,
+        longest_streak=current_user.longest_streak,
+        weak_topics=weak_topics,
+        recent_performance=recent_performance,
+        accuracy_by_question_type={"MCQ": 0, "MSQ": 0},  # computed separately
+    )
+
+
+@router.get("/revision-queue", response_model=List[RevisionItem])
+async def get_revision_queue(
+    resolved: bool = False,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Get questions in revision queue (wrongly answered questions)."""
+    result = await db.execute(
+        select(RevisionQueue).where(
+            RevisionQueue.user_id == current_user.id,
+            RevisionQueue.is_resolved == resolved,
+        ).order_by(RevisionQueue.wrong_count.desc(), RevisionQueue.last_wrong_at.desc())
+    )
