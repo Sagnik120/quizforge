@@ -278,3 +278,23 @@ async def test_goals_tree_and_progress(client, auth_headers, partner_headers):
     theirs = {g["id"]: g for g in (await client.get(f"{BASE}/goals", headers=partner_headers)).json()}
     assert secret["id"] not in theirs and len(theirs[l2["id"]]["done_by"]) == 1 and len(theirs[l1["id"]]["done_by"]) == 2
 
+    people = {p["username"]: p for p in (await client.get(f"{BASE}/overview", headers=auth_headers)).json()["people"]}
+    assert people["sagnik"]["common_goals"] == {"done": 1, "total": 2}
+    assert people["shrusti"]["common_goals"] == {"done": 2, "total": 2}
+    assert people["sagnik"]["private_goals"]["total"] == 1 and people["shrusti"]["private_goals"]["total"] == 0
+    assert people["sagnik"]["current_streak"] >= 1 and people["sagnik"]["active_today"] is True
+
+    assert (await client.delete(f"{BASE}/goals/{root['id']}", headers=partner_headers)).status_code == 204
+    left = [g["id"] for g in (await client.get(f"{BASE}/goals", headers=auth_headers)).json()]
+    assert left == [secret["id"]]
+
+
+@pytest.mark.asyncio
+async def test_calendar_and_reminders(client, auth_headers, partner_headers):
+    cal = (await client.get(f"{BASE}/calendar", headers=auth_headers)).json()
+    today = cal["today"]
+    me = next(u for u in cal["users"] if u["username"] == "sagnik")
+    assert today in me["active_days"] and len(cal["users"]) == 2
+
+    shared = (await client.post(f"{BASE}/calendar/reminders", json={"title": "Mock interview", "date": today, "space": "common"}, headers=auth_headers)).json()
+    mine = (await client.post(f"{BASE}/calendar/reminders", json={"title": "Private", "date": today}, headers=auth_headers)).json()
