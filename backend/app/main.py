@@ -83,3 +83,10 @@ async def _seed_people():
         for name in settings.USERS:
             existing = await db.execute(select(User).where(func.lower(User.username) == name.lower()))
             if not existing.scalar_one_or_none():
+                db.add(User(
+                    email=f"{name.lower()}@prepduo.app",
+                    username=name.lower(),
+                    full_name=name,
+                    hashed_password=get_password_hash(secrets.token_hex(16)),
+                ))
+        await db.commit()
