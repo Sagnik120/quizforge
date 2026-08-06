@@ -298,3 +298,10 @@ async def test_calendar_and_reminders(client, auth_headers, partner_headers):
 
     shared = (await client.post(f"{BASE}/calendar/reminders", json={"title": "Mock interview", "date": today, "space": "common"}, headers=auth_headers)).json()
     mine = (await client.post(f"{BASE}/calendar/reminders", json={"title": "Private", "date": today}, headers=auth_headers)).json()
+    seen = [r["id"] for r in (await client.get(f"{BASE}/calendar", params={"month": today[:7]}, headers=partner_headers)).json()["reminders"]]
+    assert shared["id"] in seen and mine["id"] not in seen
+    done = await client.patch(f"{BASE}/calendar/reminders/{shared['id']}", json={"done": True}, headers=partner_headers)
+    assert done.json()["done"] is True and done.json()["title"] == "Mock interview"
+    assert (await client.patch(f"{BASE}/calendar/reminders/{mine['id']}", json={"done": True}, headers=partner_headers)).status_code == 404
+    assert (await client.delete(f"{BASE}/calendar/reminders/{shared['id']}", headers=auth_headers)).status_code == 204
+    assert (await client.get(f"{BASE}/calendar", params={"month": "nope"}, headers=auth_headers)).status_code == 400
