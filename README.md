@@ -148,3 +148,28 @@ git commit -m "chore: add Docker Compose and Dockerfiles for deployment"
 ```
 
 ---
+
+## Deployment
+
+### Option 1: Docker Compose (easiest)
+
+```bash
+docker compose up --build
+```
+- Frontend: http://localhost:3000
+- Backend API: http://localhost:8000
+- Swagger: http://localhost:8000/docs
+
+### Option 2: Vercel (frontend) + Railway (backend)
+
+**Frontend → Vercel:**
+```bash
+cd frontend
+npx vercel
+# Set env: NEXT_PUBLIC_API_URL=https://your-backend.railway.app
+```
+
+**Backend → Railway:**
+- Push to GitHub
+- Connect Railway to your repo, set root to `/backend`
+- Set `DATABASE_URL` (Railway provides PostgreSQL) and `SECRET_KEY`
