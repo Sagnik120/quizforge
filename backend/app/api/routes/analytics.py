@@ -118,3 +118,90 @@ async def get_revision_queue(
             RevisionQueue.is_resolved == resolved,
         ).order_by(RevisionQueue.wrong_count.desc(), RevisionQueue.last_wrong_at.desc())
     )
+    items = result.scalars().all()
+    revision_items = []
+    for item in items:
+        q_r = await db.execute(select(Question).where(Question.id == item.question_id))
+        q = q_r.scalar_one_or_none()
+        if not q:
+            continue
+        t_r = await db.execute(select(Test).where(Test.id == q.test_id))
+        test = t_r.scalar_one()
+        topic_r = await db.execute(select(Topic).where(Topic.id == test.topic_id))
+        topic = topic_r.scalar_one()
+        sub_r = await db.execute(select(Subject).where(Subject.id == topic.subject_id))
+        subject = sub_r.scalar_one()
+        revision_items.append(RevisionItem(
+            id=item.id,
+            question_id=q.id,
+            question_text=q.text,
+            question_type=q.question_type,
+            test_name=test.name,
+            topic_name=topic.name,
+            subject_name=subject.name,
+            wrong_count=item.wrong_count,
+            last_wrong_at=item.last_wrong_at,
+            is_resolved=item.is_resolved,
+        ))
+    return revision_items
+
+
+@router.patch("/revision-queue/{item_id}/resolve", response_model=dict)
+async def resolve_revision_item(
+    item_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Mark a revision queue item as resolved (understood)."""
+    result = await db.execute(
+        select(RevisionQueue).where(
+            RevisionQueue.id == item_id,
+            RevisionQueue.user_id == current_user.id,
+        )
+    )
+    item = result.scalar_one_or_none()
+    if not item:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Item not found")
+    item.is_resolved = True
+    await db.commit()
+    return {"message": "Marked as resolved"}
+
+
+@router.get("/weak-areas", response_model=List[dict])
+async def weak_areas(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Your score per subject > topic > sub-topic (marks earned / marks possible over all attempts)."""
+    rows = await db.execute(
+        select(Test.topic_id, func.sum(Attempt.score), func.sum(Attempt.max_score), func.count(Attempt.id))
+        .join(Attempt, Attempt.test_id == Test.id)
+        .where(Attempt.user_id == current_user.id, Attempt.status == AttemptStatus.COMPLETED)
+        .group_by(Test.topic_id)
+    )
+    by_topic = {r[0]: (r[1] or 0, r[2] or 0, r[3]) for r in rows.all()}
+
+    def node(item, topic_ids, **extra):
+        got = sum(by_topic.get(t, (0, 0, 0))[0] for t in topic_ids)
+        possible = sum(by_topic.get(t, (0, 0, 0))[1] for t in topic_ids)
+        attempts = sum(by_topic.get(t, (0, 0, 0))[2] for t in topic_ids)
+        pct = round(max(got, 0) / possible * 100, 1) if possible else None
+        return {"id": item.id, "name": item.name, "percentage": pct, "attempts": attempts, **extra}
+
+    subjects = await db.execute(
+        select(Subject).where(can_access(current_user)).options(selectinload(Subject.topics)).order_by(Subject.name)
+    )
+    out = []
+    for s in subjects.scalars().all():
+        kids = {}
+        for t in s.topics:
+            if t.parent_id:
+                kids.setdefault(t.parent_id, []).append(t)
+        topics = [
+            node(t, [t.id] + [k.id for k in kids.get(t.id, [])],
+                 subtopics=[node(k, [k.id]) for k in kids.get(t.id, [])])
+            for t in s.topics if not t.parent_id
+        ]
+        out.append(node(s, [t.id for t in s.topics], space=s.space, topics=topics))
+    return out
