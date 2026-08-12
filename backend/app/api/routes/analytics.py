@@ -133,3 +133,13 @@ async def get_revision_queue(
         subject = sub_r.scalar_one()
         revision_items.append(RevisionItem(
             id=item.id,
+            question_id=q.id,
+            question_text=q.text,
+            question_type=q.question_type,
+            test_name=test.name,
+            topic_name=topic.name,
+            subject_name=subject.name,
+            wrong_count=item.wrong_count,
+            last_wrong_at=item.last_wrong_at,
+            is_resolved=item.is_resolved,
+        ))
