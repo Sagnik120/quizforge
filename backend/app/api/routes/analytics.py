@@ -153,3 +153,55 @@ async def resolve_revision_item(
     current_user: User = Depends(get_current_user),
 ):
     """Mark a revision queue item as resolved (understood)."""
+    result = await db.execute(
+        select(RevisionQueue).where(
+            RevisionQueue.id == item_id,
+            RevisionQueue.user_id == current_user.id,
+        )
+    )
+    item = result.scalar_one_or_none()
+    if not item:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Item not found")
+    item.is_resolved = True
+    await db.commit()
+    return {"message": "Marked as resolved"}
+
+
+@router.get("/weak-areas", response_model=List[dict])
+async def weak_areas(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Your score per subject > topic > sub-topic (marks earned / marks possible over all attempts)."""
+    rows = await db.execute(
+        select(Test.topic_id, func.sum(Attempt.score), func.sum(Attempt.max_score), func.count(Attempt.id))
+        .join(Attempt, Attempt.test_id == Test.id)
+        .where(Attempt.user_id == current_user.id, Attempt.status == AttemptStatus.COMPLETED)
+        .group_by(Test.topic_id)
+    )
+    by_topic = {r[0]: (r[1] or 0, r[2] or 0, r[3]) for r in rows.all()}
+
+    def node(item, topic_ids, **extra):
+        got = sum(by_topic.get(t, (0, 0, 0))[0] for t in topic_ids)
+        possible = sum(by_topic.get(t, (0, 0, 0))[1] for t in topic_ids)
+        attempts = sum(by_topic.get(t, (0, 0, 0))[2] for t in topic_ids)
+        pct = round(max(got, 0) / possible * 100, 1) if possible else None
+        return {"id": item.id, "name": item.name, "percentage": pct, "attempts": attempts, **extra}
+
+    subjects = await db.execute(
+        select(Subject).where(can_access(current_user)).options(selectinload(Subject.topics)).order_by(Subject.name)
+    )
+    out = []
+    for s in subjects.scalars().all():
+        kids = {}
+        for t in s.topics:
+            if t.parent_id:
+                kids.setdefault(t.parent_id, []).append(t)
+        topics = [
+            node(t, [t.id] + [k.id for k in kids.get(t.id, [])],
+                 subtopics=[node(k, [k.id]) for k in kids.get(t.id, [])])
+            for t in s.topics if not t.parent_id
+        ]
+        out.append(node(s, [t.id for t in s.topics], space=s.space, topics=topics))
+    return out
