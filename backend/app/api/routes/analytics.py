@@ -143,3 +143,13 @@ async def get_revision_queue(
             last_wrong_at=item.last_wrong_at,
             is_resolved=item.is_resolved,
         ))
+    return revision_items
+
+
+@router.patch("/revision-queue/{item_id}/resolve", response_model=dict)
+async def resolve_revision_item(
+    item_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Mark a revision queue item as resolved (understood)."""
