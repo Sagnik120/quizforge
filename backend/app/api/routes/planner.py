@@ -78,3 +78,73 @@ async def list_goals(db: AsyncSession = Depends(get_db), current_user: User = De
     goals = await _visible_goals(db, current_user)
     done = {}
     if goals:
+        checks = await db.execute(
+            select(GoalCheck.goal_id, GoalCheck.user_id).where(GoalCheck.goal_id.in_([g.id for g in goals]))
+        )
+        for goal_id, user_id in checks.all():
+            done.setdefault(goal_id, []).append(user_id)
+    return [
+        {"id": g.id, "parent_id": g.parent_id, "title": g.title, "space": g.space,
+         "owner_id": g.owner_id, "done_by": done.get(g.id, [])}
+        for g in goals
+    ]
+
+
+@router.post("/goals", response_model=dict, status_code=201)
+async def create_goal(payload: GoalIn, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+    title = payload.title.strip()
+    if not title:
+        raise HTTPException(status_code=400, detail="Title is required")
+    space = payload.space
+    if payload.parent_id:
+        parent = await _get_goal(payload.parent_id, db, current_user)
+        space = parent.space
+        depth, cursor = 1, parent
+        while cursor.parent_id:
+            cursor = await _get_goal(cursor.parent_id, db, current_user)
+            depth += 1
+        if depth >= MAX_GOAL_DEPTH:
+            raise HTTPException(status_code=400, detail="Goals can be nested 3 levels deep at most")
+        # A parent's state comes from its children, so its own ticks no longer apply
+        await db.execute(delete(GoalCheck).where(GoalCheck.goal_id == parent.id))
+    goal = Goal(title=title, parent_id=payload.parent_id, space=space, owner_id=current_user.id)
+    db.add(goal)
+    await db.commit()
+    return {"id": goal.id, "parent_id": goal.parent_id, "title": goal.title, "space": goal.space,
+            "owner_id": goal.owner_id, "done_by": []}
+
+
+@router.put("/goals/{goal_id}", response_model=dict)
+async def rename_goal(goal_id: str, payload: GoalTitle, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+    goal = await _get_goal(goal_id, db, current_user)
+    if not payload.title.strip():
+        raise HTTPException(status_code=400, detail="Title is required")
+    goal.title = payload.title.strip()
+    await db.commit()
+    return {"id": goal.id, "title": goal.title}
+
+
+@router.post("/goals/{goal_id}/toggle", response_model=dict)
+async def toggle_goal(goal_id: str, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+    """Tick/untick a goal for yourself. Ticking a parent ticks everything under it."""
+    await _get_goal(goal_id, db, current_user)
+    _, leaves = _subtree(await _visible_goals(db, current_user), goal_id)
+    mine = await db.execute(
+        select(GoalCheck.goal_id).where(GoalCheck.user_id == current_user.id, GoalCheck.goal_id.in_(leaves))
+    )
+    ticked = {r[0] for r in mine.all()}
+    if len(ticked) == len(leaves):
+        await db.execute(
+            delete(GoalCheck).where(GoalCheck.user_id == current_user.id, GoalCheck.goal_id.in_(leaves))
+        )
+        done = False
+    else:
+        for leaf in leaves:
+            if leaf not in ticked:
+                db.add(GoalCheck(goal_id=leaf, user_id=current_user.id))
+        done = True
+    await db.commit()
+    return {"done": done}
+
+
+@router.delete("/goals/{goal_id}", status_code=204)
