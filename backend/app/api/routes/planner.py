@@ -148,3 +148,73 @@ async def toggle_goal(goal_id: str, db: AsyncSession = Depends(get_db), current_
 
 
 @router.delete("/goals/{goal_id}", status_code=204)
+async def delete_goal(goal_id: str, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+    await _get_goal(goal_id, db, current_user)
+    ids, _ = _subtree(await _visible_goals(db, current_user), goal_id)
+    await db.execute(delete(GoalCheck).where(GoalCheck.goal_id.in_(ids)))
+    await db.execute(delete(Goal).where(Goal.id.in_(ids)))
+    await db.commit()
+
+
+# ─── Calendar ──────────────────────────────────────────────
+
+class ReminderIn(BaseModel):
+    title: str
+    date: date
+    note: Optional[str] = None
+    space: Space = "private"
+
+
+class ReminderPatch(BaseModel):
+    title: Optional[str] = None
+    date: Optional[date] = None
+    note: Optional[str] = None
+    done: Optional[bool] = None
+
+
+def _reminder(r: Reminder) -> dict:
+    return {"id": r.id, "title": r.title, "note": r.note, "date": r.date.isoformat(),
+            "space": r.space, "done": bool(r.done), "owner_id": r.owner_id}
+
+
+async def _get_reminder(reminder_id: str, db: AsyncSession, user: User) -> Reminder:
+    result = await db.execute(select(Reminder).where(Reminder.id == reminder_id, _visible(Reminder, user)))
+    reminder = result.scalar_one_or_none()
+    if not reminder:
+        raise HTTPException(status_code=404, detail="Reminder not found")
+    return reminder
+
+
+@router.get("/calendar", response_model=dict)
+async def calendar(month: Optional[str] = None, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+    """One month (YYYY-MM): each person's active days and streak, plus the reminders you can see."""
+    today = local_today()
+    try:
+        year, mon = (int(p) for p in month.split("-")) if month else (today.year, today.month)
+        first = date(year, mon, 1)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="month must look like YYYY-MM")
+    last = (first + timedelta(days=32)).replace(day=1) - timedelta(days=1)
+
+    users = []
+    for person in await _people(db):
+        days = await activity_days(db, person.id)
+        current, longest = streaks(days)
+        users.append({
+            "id": person.id, "username": person.username, "full_name": person.full_name or person.username,
+            "current_streak": current, "longest_streak": longest,
+            "active_days": sorted(d.isoformat() for d in days if first <= d <= last),
+        })
+    reminders = await db.execute(
+        select(Reminder)
+        .where(_visible(Reminder, current_user), Reminder.date >= first, Reminder.date <= last)
+        .order_by(Reminder.date, Reminder.created_at)
+    )
+    return {"today": today.isoformat(), "month": first.strftime("%Y-%m"), "users": users,
+            "reminders": [_reminder(r) for r in reminders.scalars().all()]}
+
+
+@router.post("/calendar/reminders", response_model=dict, status_code=201)
+async def create_reminder(payload: ReminderIn, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+    if not payload.title.strip():
+        raise HTTPException(status_code=400, detail="Title is required")
