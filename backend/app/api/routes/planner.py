@@ -218,3 +218,71 @@ async def calendar(month: Optional[str] = None, db: AsyncSession = Depends(get_d
 async def create_reminder(payload: ReminderIn, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
     if not payload.title.strip():
         raise HTTPException(status_code=400, detail="Title is required")
+    reminder = Reminder(title=payload.title.strip(), note=payload.note, date=payload.date,
+                        space=payload.space, owner_id=current_user.id)
+    db.add(reminder)
+    await db.commit()
+    return _reminder(reminder)
+
+
+@router.patch("/calendar/reminders/{reminder_id}", response_model=dict)
+async def update_reminder(reminder_id: str, payload: ReminderPatch, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+    reminder = await _get_reminder(reminder_id, db, current_user)
+    for key, value in payload.model_dump(exclude_unset=True).items():
+        setattr(reminder, key, value)
+    await db.commit()
+    return _reminder(reminder)
+
+
+@router.delete("/calendar/reminders/{reminder_id}", status_code=204)
+async def delete_reminder(reminder_id: str, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+    await db.delete(await _get_reminder(reminder_id, db, current_user))
+    await db.commit()
+
+
+# ─── Overview ──────────────────────────────────────────────
+
+@router.get("/overview", response_model=dict)
+async def overview(db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+    """Side-by-side progress for everyone: streak, test results and goal completion."""
+    today = local_today()
+    all_goals = (await db.execute(select(Goal))).scalars().all()
+    parents = {g.parent_id for g in all_goals if g.parent_id}
+    leaves = [g for g in all_goals if g.id not in parents]
+    checks = (await db.execute(select(GoalCheck.goal_id, GoalCheck.user_id))).all()
+    ticked = {(goal_id, user_id) for goal_id, user_id in checks}
+
+    people = []
+    for person in await _people(db):
+        days = await activity_days(db, person.id)
+        current, longest = streaks(days)
+        perf = await db.execute(
+            select(func.count(Attempt.id), func.avg(Attempt.percentage)).where(
+                Attempt.user_id == person.id, Attempt.status == AttemptStatus.COMPLETED
+            )
+        )
+        attempts, average = perf.one()
+
+        def progress(space, owner=None):
+            pool = [g for g in leaves if g.space == space and (owner is None or g.owner_id == owner)]
+            return {"done": sum((g.id, person.id) in ticked for g in pool), "total": len(pool)}
+
+        people.append({
+            "id": person.id, "username": person.username, "full_name": person.full_name or person.username,
+            "is_me": person.id == current_user.id,
+            "current_streak": current, "longest_streak": longest, "active_today": today in days,
+            "attempts": attempts or 0, "average_percentage": round(average or 0, 1),
+            "common_goals": progress("common"),
+            # Only the counts of someone's private goals are shared, never the goals themselves
+            "private_goals": progress("private", person.id),
+        })
+
+    upcoming = await db.execute(
+        select(Reminder)
+        .where(_visible(Reminder, current_user), Reminder.done == False,  # noqa: E712
+               Reminder.date <= today + timedelta(days=7))
+        .order_by(Reminder.date)
+        .limit(8)
+    )
+    return {"today": today.isoformat(), "people": people,
+            "reminders": [_reminder(r) for r in upcoming.scalars().all()]}
