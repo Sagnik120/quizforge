@@ -90,3 +90,13 @@ async def _seed_people():
                     hashed_password=get_password_hash(secrets.token_hex(16)),
                 ))
         await db.commit()
+
+
+@app.get("/", tags=["Health"])
+async def root():
+    return {"message": "QuizForge API is running", "docs": "/docs"}
+
+
+@app.get("/health", tags=["Health"])
+async def health():
+    return {"status": "ok", "version": "1.0.0"}
