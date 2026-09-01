@@ -33,3 +33,28 @@ api.interceptors.response.use(
 // ─── Auth ──────────────────────────────────────────────
 export const authApi = {
   people: () => api.get("/auth/users"),
+  quickLogin: (username: string, passcode = "") =>
+    api.post("/auth/quick-login", { username, passcode }),
+};
+
+// ─── Subjects & Topics ─────────────────────────────────
+export const subjectsApi = {
+  list: () => api.get("/subjects/"),
+  create: (data: any) => api.post("/subjects/", data),
+  update: (id: string, data: any) => api.put(`/subjects/${id}`, data),
+  delete: (id: string) => api.delete(`/subjects/${id}`),
+  createTopic: (subjectId: string, data: any) =>
+    api.post(`/subjects/${subjectId}/topics`, data),
+  updateTopic: (subjectId: string, topicId: string, data: any) =>
+    api.put(`/subjects/${subjectId}/topics/${topicId}`, data),
+  deleteTopic: (subjectId: string, topicId: string) =>
+    api.delete(`/subjects/${subjectId}/topics/${topicId}`),
+};
+
+// ─── Tests ─────────────────────────────────────────────
+export const testsApi = {
+  list: (params?: { topic_id?: string; subject_id?: string; space?: string }) =>
+    api.get("/tests/", { params }),
+  create: (data: any) => api.post("/tests/", data),
+  importJSON: (file: File) => {
+    const form = new FormData();
