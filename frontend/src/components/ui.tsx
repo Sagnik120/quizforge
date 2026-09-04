@@ -33,3 +33,48 @@ export function ProgressBar({ value, color, className }: { value: number; color?
 export const ratio = (done: number, total: number) => (total ? Math.round((done / total) * 100) : 0);
 
 // The selected space is remembered across pages and reloads
+export const useSpace = create<{ space: Space; setSpace: (s: Space) => void }>()(
+  persist((set) => ({ space: "private", setSpace: (space) => set({ space }) }), { name: "prepduo-space" })
+);
+
+export function SpaceTabs() {
+  const { space, setSpace } = useSpace();
+  const tabs = [
+    { id: "private" as Space, label: "Private", icon: Lock },
+    { id: "common" as Space, label: "Common", icon: Users },
+  ];
+  return (
+    <div className="flex gap-1 bg-gray-100 p-1 rounded-xl w-fit">
+      {tabs.map(({ id, label, icon: Icon }) => (
+        <button
+          key={id}
+          onClick={() => setSpace(id)}
+          className={clsx(
+            "px-4 py-1.5 rounded-lg text-sm font-medium flex items-center gap-1.5 transition-all",
+            space === id ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"
+          )}
+        >
+          <Icon size={14} /> {label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+export function SpaceBadge({ space }: { space: Space }) {
+  return (
+    <span className={clsx("text-[11px] px-2 py-0.5 rounded-full font-medium",
+      space === "common" ? "bg-pink-50 text-pink-600" : "bg-gray-100 text-gray-500")}>
+      {space === "common" ? "Common" : "Private"}
+    </span>
+  );
+}
+
+export function Avatar({ name, username, size = 32 }: { name: string; username: string; size?: number }) {
+  return (
+    <div className="rounded-full flex items-center justify-center text-white font-bold shrink-0"
+      style={{ width: size, height: size, background: personColor(username), fontSize: size * 0.42 }}>
+      {name[0]?.toUpperCase()}
+    </div>
+  );
+}
