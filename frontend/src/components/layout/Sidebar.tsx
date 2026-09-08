@@ -33,3 +33,28 @@ export function Sidebar() {
   const switchUser = () => {
     clearAuth();
     router.push("/auth/login");
+  };
+
+  return (
+    <aside className="w-64 min-h-screen bg-white border-r border-gray-100 flex flex-col">
+      <div className="px-6 py-5 border-b border-gray-100">
+        <h1 className="text-xl font-bold text-primary-600">🎯 PrepDuo</h1>
+        <p className="text-xs text-gray-500 mt-0.5">Placement prep, together</p>
+      </div>
+
+      <div className="px-6 py-3 bg-orange-50 flex items-center gap-2 border-b border-orange-100">
+        <span className={clsx(me?.current_streak > 0 && "flame")}><Flame size={16} className="text-orange-500" /></span>
+        <span className="text-sm text-orange-700 font-medium">{me?.current_streak ?? 0} day streak</span>
+      </div>
+
+      <nav className="flex-1 py-4 px-3 space-y-0.5">
+        {nav.map(({ href, icon: Icon, label }) => {
+          // "/tests" must not light up while on "/tests/new"
+          const active = href === "/tests" ? pathname === href : pathname.startsWith(href);
+          return (
+            <Link
+              key={href}
+              href={href}
+              className={clsx(
+                "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all hover:translate-x-0.5",
+                active ? "bg-primary-50 text-primary-700" : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
