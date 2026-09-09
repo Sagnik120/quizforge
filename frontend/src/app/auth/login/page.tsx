@@ -53,3 +53,23 @@ export default function LoginPage() {
             <p className="text-sm text-red-500 mb-3">Could not reach the server.</p>
             <button className="btn-secondary" onClick={() => refetch()}>Try again</button>
           </div>
+        ) : (
+          <>
+            {data.passcode_required && (
+              <div className="mb-5">
+                <label className="label">Passcode</label>
+                <input className="input" type="password" value={passcode} onChange={(e) => setPasscode(e.target.value)} placeholder="Shared passcode" />
+              </div>
+            )}
+            <div className="grid grid-cols-2 gap-4 stagger">
+              {data.users.map((u: any) => (
+                <button
+                  key={u.username}
+                  onClick={() => enter(u.username)}
+                  disabled={!!entering}
+                  className="lift flex flex-col items-center gap-3 rounded-2xl border border-gray-100 p-6 hover:border-primary-200 active:scale-95 disabled:opacity-60"
+                >
+                  <Avatar name={u.full_name} username={u.username} size={64} />
+                  <span className="font-semibold text-gray-800">{u.full_name}</span>
+                  {entering === u.username
+                    ? <span className="loader-dots"><span /><span /><span /></span>
