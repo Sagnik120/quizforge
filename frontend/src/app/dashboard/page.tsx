@@ -38,3 +38,38 @@ function PersonCard({ p }: { p: any }) {
         <div key={b.label} className="mb-3 last:mb-0">
           <div className="flex justify-between text-xs text-gray-500 mb-1">
             <span>{b.label}</span><span>{b.done}/{b.total}</span>
+          </div>
+          <ProgressBar value={ratio(b.done, b.total)} color={color} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function TestRow({ t, hint }: { t: any; hint: string }) {
+  return (
+    <Link href={`/attempt?test_id=${t.id}`} className="flex items-center gap-3 py-2.5 group">
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-medium text-gray-800 truncate group-hover:text-primary-600 transition-colors">{t.name}</p>
+        <p className="text-xs text-gray-500 truncate">{t.subject_name} › {t.topic_name} · {hint}</p>
+      </div>
+      <SpaceBadge space={t.space} />
+    </Link>
+  );
+}
+
+export default function DashboardPage() {
+  const { user } = useAuthStore();
+  const { data, isLoading } = useQuery({ queryKey: ["overview"], queryFn: () => overviewApi.get().then((r) => r.data) });
+  const { data: tests = [] } = useQuery<any[]>({ queryKey: ["tests"], queryFn: () => testsApi.list().then((r) => r.data) });
+
+  const retry = tests.filter((t) => t.needs_retry);
+  const fresh = tests.filter((t) => t.attempt_count === 0);
+
+  return (
+    <AppLayout>
+      <div className="max-w-5xl mx-auto space-y-6">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Hi {user?.full_name || user?.username} 👋</h1>
+          <p className="text-gray-500 mt-1">{data ? format(parseISO(data.today), "EEEE, d MMMM") : " "}</p>
+        </div>
