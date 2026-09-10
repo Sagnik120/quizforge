@@ -73,3 +73,13 @@ export default function LoginPage() {
                   <span className="font-semibold text-gray-800">{u.full_name}</span>
                   {entering === u.username
                     ? <span className="loader-dots"><span /><span /><span /></span>
+                    : <span className="text-xs text-gray-400">Open dashboard</span>}
+                </button>
+              ))}
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
