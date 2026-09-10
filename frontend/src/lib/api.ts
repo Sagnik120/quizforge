@@ -58,3 +58,18 @@ export const testsApi = {
   create: (data: any) => api.post("/tests/", data),
   importJSON: (file: File) => {
     const form = new FormData();
+    form.append("file", file);
+    return api.post("/tests/import-json", form, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+  },
+  get: (id: string) => api.get(`/tests/${id}`),
+  getForAttempt: (id: string) => api.get(`/tests/${id}/attempt-view`),
+  delete: (id: string) => api.delete(`/tests/${id}`),
+  exampleJSON: () => api.get("/tests/example-json"),
+};
+
+// ─── Attempts ──────────────────────────────────────────
+export const attemptsApi = {
+  start: (testId: string) => api.post("/attempts/start", { test_id: testId }),
+  submit: (attemptId: string, answers: any[]) =>
