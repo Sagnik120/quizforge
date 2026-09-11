@@ -108,3 +108,17 @@ export default function DashboardPage() {
                           <p className={r.date < data.today ? "text-xs text-red-500" : "text-xs text-gray-500"}>
                             {r.date === data.today ? "Today" : format(parseISO(r.date), "EEE, d MMM")}{r.date < data.today && " · overdue"}
                           </p>
+                        </div>
+                        <SpaceBadge space={r.space} />
+                      </Link>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+    </AppLayout>
+  );
+}
