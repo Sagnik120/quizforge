@@ -73,3 +73,38 @@ export default function DashboardPage() {
           <h1 className="text-2xl font-bold text-gray-900">Hi {user?.full_name || user?.username} 👋</h1>
           <p className="text-gray-500 mt-1">{data ? format(parseISO(data.today), "EEEE, d MMMM") : " "}</p>
         </div>
+
+        {isLoading ? <Loader label="Loading your dashboard" /> : (
+          <>
+            <div className="grid md:grid-cols-2 gap-4 stagger">
+              {data.people.map((p: any) => <PersonCard key={p.id} p={p} />)}
+            </div>
+
+            <div className="grid md:grid-cols-3 gap-4 stagger">
+              <div className="card">
+                <h2 className="font-semibold text-gray-800 flex items-center gap-2 mb-2"><RotateCcw size={16} className="text-red-500" /> Attempt again</h2>
+                {retry.length === 0 ? <p className="text-sm text-gray-400">No weak scores. Nice.</p> : (
+                  <div className="divide-y divide-gray-50">
+                    {retry.slice(0, 5).map((t) => <TestRow key={t.id} t={t} hint={`best ${t.best_percentage}%`} />)}
+                  </div>
+                )}
+              </div>
+              <div className="card">
+                <h2 className="font-semibold text-gray-800 flex items-center gap-2 mb-2"><Sparkles size={16} className="text-primary-500" /> Not attempted yet</h2>
+                {fresh.length === 0 ? <p className="text-sm text-gray-400">You have tried every test.</p> : (
+                  <div className="divide-y divide-gray-50">
+                    {fresh.slice(0, 5).map((t) => <TestRow key={t.id} t={t} hint={t.creator_id === user?.id ? "made by you" : `from ${t.creator_name}`} />)}
+                  </div>
+                )}
+              </div>
+              <div className="card">
+                <h2 className="font-semibold text-gray-800 flex items-center gap-2 mb-2"><Bell size={16} className="text-amber-500" /> Reminders this week</h2>
+                {data.reminders.length === 0 ? <p className="text-sm text-gray-400">Nothing due. <Link href="/calendar" className="text-primary-600 hover:underline">Add one</Link></p> : (
+                  <div className="divide-y divide-gray-50">
+                    {data.reminders.map((r: any) => (
+                      <Link key={r.id} href="/calendar" className="flex items-center gap-3 py-2.5">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-gray-800 truncate">{r.title}</p>
+                          <p className={r.date < data.today ? "text-xs text-red-500" : "text-xs text-gray-500"}>
+                            {r.date === data.today ? "Today" : format(parseISO(r.date), "EEE, d MMM")}{r.date < data.today && " · overdue"}
+                          </p>
