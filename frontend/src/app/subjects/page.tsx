@@ -48,3 +48,48 @@ export default function SubjectsPage() {
 
   const shown = subjects.filter((s) => s.space === space);
 
+  const DeleteButton = ({ label, action }: { label: string; action: () => Promise<any> }) => (
+    <button aria-label={`Delete ${label}`} className="p-1 text-gray-300 hover:text-red-500 transition-colors"
+      onClick={() => { if (confirm(`Delete "${label}" with everything inside it (tests and attempts too)?`)) run.mutate(action); }}>
+      <Trash2 size={14} />
+    </button>
+  );
+
+  return (
+    <AppLayout>
+      <div className="max-w-4xl mx-auto space-y-5">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Subjects & Topics</h1>
+          <p className="text-gray-500 mt-1">Subject › Topic › Sub-topic. Tests attach to a topic or a sub-topic.</p>
+        </div>
+        <SpaceTabs />
+
+        <div className="card space-y-3">
+          <QuickAdd placeholder={`New ${space} subject, e.g. DSA, DBMS, Aptitude`}
+            onAdd={(name) => run.mutate(() => subjectsApi.create({ name, color, space }))} />
+          <div className="flex gap-2">
+            {COLORS.map((c) => (
+              <button key={c} aria-label={`Colour ${c}`} onClick={() => setColor(c)}
+                className="w-5 h-5 rounded-full transition-transform hover:scale-125"
+                style={{ background: c, outline: color === c ? `2px solid ${c}` : "none", outlineOffset: 2 }} />
+            ))}
+          </div>
+        </div>
+
+        {isLoading ? <Loader label="Loading subjects" /> : shown.length === 0 ? (
+          <div className="card text-center text-gray-400 py-10">No {space} subjects yet.</div>
+        ) : (
+          <div className="grid md:grid-cols-2 gap-4 stagger">
+            {shown.map((s) => {
+              const roots = s.topics.filter((t) => !t.parent_id);
+              const kids = (t: Topic) => s.topics.filter((k) => k.parent_id === t.id);
+              return (
+                <div key={s.id} className="card lift space-y-3" style={{ borderTop: `3px solid ${s.color}` }}>
+                  <div className="flex items-center justify-between">
+                    <h3 className="font-semibold text-gray-900">{s.name}</h3>
+                    <DeleteButton label={s.name} action={() => subjectsApi.delete(s.id)} />
+                  </div>
+                  {roots.map((t) => (
+                    <div key={t.id} className="rounded-lg bg-gray-50 p-3 space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-medium text-gray-800">{t.name}</span>
