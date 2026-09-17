@@ -93,3 +93,26 @@ export default function SubjectsPage() {
                     <div key={t.id} className="rounded-lg bg-gray-50 p-3 space-y-1.5">
                       <div className="flex items-center justify-between">
                         <span className="text-sm font-medium text-gray-800">{t.name}</span>
+                        <DeleteButton label={t.name} action={() => subjectsApi.deleteTopic(s.id, t.id)} />
+                      </div>
+                      {kids(t).map((k) => (
+                        <div key={k.id} className="flex items-center justify-between pl-2 text-sm text-gray-600">
+                          <span className="flex items-center gap-1.5"><CornerDownRight size={12} className="text-gray-300" />{k.name}</span>
+                          <DeleteButton label={k.name} action={() => subjectsApi.deleteTopic(s.id, k.id)} />
+                        </div>
+                      ))}
+                      <QuickAdd small placeholder="Add sub-topic"
+                        onAdd={(name) => run.mutate(() => subjectsApi.createTopic(s.id, { name, parent_id: t.id }))} />
+                    </div>
+                  ))}
+                  <QuickAdd small placeholder="Add topic"
+                    onAdd={(name) => run.mutate(() => subjectsApi.createTopic(s.id, { name }))} />
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </AppLayout>
+  );
+}
