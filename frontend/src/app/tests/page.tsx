@@ -83,3 +83,45 @@ export default function TestsPage() {
                       <p className="text-xs text-gray-500 truncate">{t.subject_name} › {t.topic_name}</p>
                     </div>
                     <span className={clsx("text-[11px] px-2 py-0.5 rounded-full font-medium whitespace-nowrap",
+                      !tried ? "bg-gray-100 text-gray-500" : t.needs_retry ? "bg-red-50 text-red-600" : "bg-green-50 text-green-700")}>
+                      {!tried ? "Not attempted" : t.needs_retry ? "Attempt again" : "Cleared"}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-4 text-xs text-gray-500">
+                    <span className="flex items-center gap-1"><HelpCircle size={13} /> {t.total_questions} questions · {t.total_marks} marks</span>
+                    <span className="flex items-center gap-1"><Clock size={13} /> {t.time_limit_minutes ? `${t.time_limit_minutes} min` : "No limit"}</span>
+                  </div>
+
+                  <div className="rounded-lg bg-gray-50 px-3 py-2 text-xs space-y-1">
+                    <p className="text-gray-600">
+                      You: {tried ? (
+                        <>attempted {t.attempt_count}× · best <b style={{ color: pctColor(t.best_percentage) }}>{t.best_percentage}%</b> · last {t.last_percentage}%</>
+                      ) : "not attempted yet"}
+                    </p>
+                    {space === "common" && (
+                      <p className="text-gray-500">
+                        Partner: {t.partner_attempt_count > 0 ? `attempted ${t.partner_attempt_count}× · best ${t.partner_best_percentage}%` : "not attempted yet"}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-2 mt-auto">
+                    <Link href={`/attempt?test_id=${t.id}`} className="btn-primary flex-1 flex items-center justify-center gap-2 text-sm">
+                      {tried ? <><RotateCcw size={14} /> Attempt again</> : <><Play size={14} /> Start</>}
+                    </Link>
+                    <span className="text-[11px] text-gray-400">by {t.creator_id === user?.id ? "you" : t.creator_name}</span>
+                    <button aria-label="Delete test" className="p-2 text-gray-300 hover:text-red-500 transition-colors"
+                      onClick={() => { if (confirm(`Delete "${t.name}" and all its attempts?`)) remove.mutate(t.id); }}>
+                      <Trash2 size={15} />
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </AppLayout>
+  );
+}
