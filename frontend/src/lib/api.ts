@@ -73,3 +73,18 @@ export const testsApi = {
 export const attemptsApi = {
   start: (testId: string) => api.post("/attempts/start", { test_id: testId }),
   submit: (attemptId: string, answers: any[]) =>
+    api.post(`/attempts/${attemptId}/submit`, { answers }),
+  myAttempts: (testId?: string) =>
+    api.get("/attempts/my", { params: testId ? { test_id: testId } : {} }),
+  result: (attemptId: string) => api.get(`/attempts/${attemptId}/result`),
+};
+
+// ─── Analytics ─────────────────────────────────────────
+export const analyticsApi = {
+  summary: () => api.get("/analytics/summary"),
+  weakAreas: () => api.get("/analytics/weak-areas"),
+  revisionQueue: (resolved = false) =>
+    api.get("/analytics/revision-queue", { params: { resolved } }),
+  resolveRevision: (itemId: string) =>
+    api.patch(`/analytics/revision-queue/${itemId}/resolve`),
+};
