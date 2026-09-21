@@ -173,3 +173,28 @@ npx vercel
 - Push to GitHub
 - Connect Railway to your repo, set root to `/backend`
 - Set `DATABASE_URL` (Railway provides PostgreSQL) and `SECRET_KEY`
+- Add start command: `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
+
+---
+
+## JSON Import Format
+
+```json
+{
+  "name": "Sample Physics Test",
+  "description": "Test on Newton's Laws",
+  "topic_id": "<your-topic-uuid>",
+  "time_limit_minutes": 30,
+  "questions": [
+    {
+      "question_type": "MCQ",
+      "text": "Which of Newton's laws states F = ma?",
+      "options": [
+        {"id": "a", "text": "First Law",  "is_correct": false},
+        {"id": "b", "text": "Second Law", "is_correct": true},
+        {"id": "c", "text": "Third Law",  "is_correct": false},
+        {"id": "d", "text": "None",       "is_correct": false}
+      ],
+      "explanation": "Newton's Second Law: F = ma",
+      "marks": 2,
+      "negative_marks": 0
