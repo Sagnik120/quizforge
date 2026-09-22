@@ -98,3 +98,63 @@ function TopicSelector({
         )}
       </div>
     </div>
+  );
+}
+
+// ─── JSON Import tab ──────────────────────────────────────
+function JSONImportTab({ subjects }: { subjects: Subject[] }) {
+  const router = useRouter();
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [subjectId, setSubjectId] = useState("");
+  const [topicId, setTopicId] = useState("");
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [preview, setPreview] = useState<any>(null);
+  const [parseError, setParseError] = useState("");
+  const [pasted, setPasted] = useState("");
+
+  const handlePaste = (text: string) => {
+    setPasted(text);
+    setSelectedFile(null);
+    setParseError("");
+    setPreview(null);
+    if (!text.trim()) return;
+    try {
+      setPreview(JSON.parse(text));
+    } catch {
+      setParseError("That is not valid JSON yet — check for a missing comma, quote or bracket.");
+    }
+  };
+
+  const handleFileSelect = (file: File) => {
+    setSelectedFile(file);
+    setPasted("");
+    setParseError("");
+    setPreview(null);
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        setPreview(JSON.parse(e.target?.result as string));
+      } catch {
+        setParseError("Invalid JSON file — could not parse.");
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  const importMutation = useMutation({
+    mutationFn: async () => {
+      const text = selectedFile ? await selectedFile.text() : pasted;
+      return testsApi.create({ ...JSON.parse(text), topic_id: topicId });
+    },
+    onSuccess: () => { toast.success("Test imported successfully!"); router.push("/tests"); },
+    onError: (e: any) => {
+      const detail = e.response?.data?.detail;
+      // Validation errors arrive as a list of {loc, msg}; show the first one readably
+      toast.error(Array.isArray(detail) ? `${detail[0].loc.slice(1).join(" › ")}: ${detail[0].msg}` : detail || "Import failed — check your JSON format");
+    },
+  });
+
+  const canImport = topicId && preview && !parseError;
+
+  return (
+    <div className="space-y-4">
