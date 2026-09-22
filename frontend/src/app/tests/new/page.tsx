@@ -48,3 +48,53 @@ const EXAMPLE_JSON = `{
       "negative_marks": 0
     },
     {
+      "question_type": "MSQ",
+      "text": "Select ALL correct options",
+      "options": [
+        { "id": "a", "text": "Correct one", "is_correct": true },
+        { "id": "b", "text": "Wrong one",   "is_correct": false },
+        { "id": "c", "text": "Correct two", "is_correct": true },
+        { "id": "d", "text": "Wrong two",   "is_correct": false }
+      ],
+      "marks": 3,
+      "negative_marks": 1
+    }
+  ]
+}`;
+
+// ─── Shared topic selector ────────────────────────────────
+function TopicSelector({
+  subjects, subjectId, topicId, onSubjectChange, onTopicChange,
+}: {
+  subjects: Subject[];
+  subjectId: string;
+  topicId: string;
+  onSubjectChange: (id: string) => void;
+  onTopicChange: (id: string) => void;
+}) {
+  const selectedSubject = subjects.find(s => s.id === subjectId);
+  return (
+    <div className="grid grid-cols-2 gap-4">
+      <div>
+        <label className="label">Subject *</label>
+        <select className="input" value={subjectId} onChange={e => { onSubjectChange(e.target.value); onTopicChange(""); }}>
+          <option value="">Select subject</option>
+          {subjects.map(s => <option key={s.id} value={s.id}>{s.name} ({s.space})</option>)}
+        </select>
+      </div>
+      <div>
+        <label className="label">Topic / sub-topic *</label>
+        <select className="input" value={topicId} onChange={e => onTopicChange(e.target.value)} disabled={!subjectId}>
+          <option value="">Select topic</option>
+          {selectedSubject?.topics.filter(t => !t.parent_id).flatMap(t => [
+            <option key={t.id} value={t.id}>{t.name}</option>,
+            ...selectedSubject.topics.filter(k => k.parent_id === t.id).map(k => (
+              <option key={k.id} value={k.id}>&nbsp;&nbsp;↳ {k.name}</option>
+            )),
+          ])}
+        </select>
+        {subjectId && selectedSubject?.topics.length === 0 && (
+          <p className="text-xs text-orange-500 mt-1">No topics yet — add one in Subjects page first.</p>
+        )}
+      </div>
+    </div>
