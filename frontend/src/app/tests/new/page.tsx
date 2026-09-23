@@ -158,3 +158,63 @@ function JSONImportTab({ subjects }: { subjects: Subject[] }) {
 
   return (
     <div className="space-y-4">
+      {/* Step 1 */}
+      <div className="card">
+        <div className="flex items-center gap-2 mb-4">
+          <span className="w-6 h-6 rounded-full bg-primary-500 text-white text-xs flex items-center justify-center font-bold">1</span>
+          <h3 className="font-semibold text-gray-800">Choose where to save this test</h3>
+        </div>
+        <TopicSelector subjects={subjects} subjectId={subjectId} topicId={topicId} onSubjectChange={setSubjectId} onTopicChange={setTopicId} />
+      </div>
+
+      {/* Step 2 */}
+      <div className={clsx("card transition-all", !topicId && "opacity-50 pointer-events-none")}>
+        <div className="flex items-center gap-2 mb-4">
+          <span className="w-6 h-6 rounded-full bg-primary-500 text-white text-xs flex items-center justify-center font-bold">2</span>
+          <h3 className="font-semibold text-gray-800">Upload a JSON file or paste JSON</h3>
+        </div>
+        <div
+          onClick={() => fileRef.current?.click()}
+          onDragOver={e => e.preventDefault()}
+          onDrop={e => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) handleFileSelect(f); }}
+          className={clsx(
+            "border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-colors",
+            selectedFile ? "border-green-400 bg-green-50" : "border-gray-200 hover:border-primary-400 hover:bg-primary-50"
+          )}
+        >
+          {selectedFile ? (
+            <div className="flex items-center justify-center gap-3">
+              <CheckCircle2 className="text-green-500" size={24} />
+              <div className="text-left">
+                <p className="font-medium text-green-700">{selectedFile.name}</p>
+                <p className="text-xs text-green-600">{preview ? `${preview.questions?.length ?? 0} questions detected` : ""}</p>
+              </div>
+              <button onClick={e => { e.stopPropagation(); setSelectedFile(null); setPreview(null); }} className="ml-4 text-xs text-gray-400 hover:text-red-500">Remove</button>
+            </div>
+          ) : (
+            <>
+              <FileJson className="mx-auto mb-2 text-gray-300" size={36} />
+              <p className="text-sm text-gray-500">Click to upload or drag & drop a JSON file</p>
+              <p className="text-xs text-gray-400 mt-1">No need to include topic_id — it's set from the dropdown above</p>
+            </>
+          )}
+        </div>
+        <input ref={fileRef} type="file" accept=".json" className="hidden" onChange={e => { if (e.target.files?.[0]) handleFileSelect(e.target.files[0]); }} />
+        <div className="flex items-center justify-between mt-4 mb-1">
+          <label className="label !mb-0" htmlFor="json-paste">…or paste JSON here</label>
+          <button type="button" className="text-xs text-primary-600 hover:underline" onClick={() => handlePaste(EXAMPLE_JSON)}>Fill with example</button>
+        </div>
+        <textarea id="json-paste" className="input font-mono !text-xs resize-y" rows={8} spellCheck={false}
+          value={pasted} onChange={e => handlePaste(e.target.value)} placeholder='{ "name": "My test", "questions": [ ... ] }' />
+        {parseError && <p className="text-red-500 text-sm mt-2">{parseError}</p>}
+      </div>
+
+      {/* Step 3 */}
+      {preview && !parseError && (
+        <div className="card">
+          <div className="flex items-center gap-2 mb-4">
+            <span className="w-6 h-6 rounded-full bg-primary-500 text-white text-xs flex items-center justify-center font-bold">3</span>
+            <h3 className="font-semibold text-gray-800">Preview & Import</h3>
+          </div>
+          <div className="bg-gray-50 rounded-xl p-4 mb-4 space-y-1 text-sm">
+            <p><span className="text-gray-500">Test name:</span> <span className="font-medium text-gray-800">{preview.name || "—"}</span></p>
