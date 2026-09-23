@@ -218,3 +218,63 @@ function JSONImportTab({ subjects }: { subjects: Subject[] }) {
           </div>
           <div className="bg-gray-50 rounded-xl p-4 mb-4 space-y-1 text-sm">
             <p><span className="text-gray-500">Test name:</span> <span className="font-medium text-gray-800">{preview.name || "—"}</span></p>
+            <p><span className="text-gray-500">Description:</span> <span className="text-gray-700">{preview.description || "None"}</span></p>
+            <p><span className="text-gray-500">Questions:</span> <span className="font-medium text-gray-800">{preview.questions?.length ?? 0}</span></p>
+            <p><span className="text-gray-500">Time limit:</span> <span className="text-gray-700">{preview.time_limit_minutes ? `${preview.time_limit_minutes} min` : "No limit"}</span></p>
+            {preview.questions?.length > 0 && (
+              <div className="mt-2 pt-2 border-t border-gray-200">
+                <p className="text-gray-500 mb-1">Question types:</p>
+                <div className="flex gap-2">
+                  <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded">MCQ: {preview.questions.filter((q: any) => q.question_type === "MCQ").length}</span>
+                  <span className="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded">MSQ: {preview.questions.filter((q: any) => q.question_type === "MSQ").length}</span>
+                </div>
+              </div>
+            )}
+          </div>
+          <button className="btn-primary w-full" onClick={() => importMutation.mutate()} disabled={!canImport || importMutation.isPending}>
+            {importMutation.isPending ? "Importing..." : `Import Test (${preview.questions?.length ?? 0} questions)`}
+          </button>
+        </div>
+      )}
+
+      {/* JSON format reference */}
+      <details className="card cursor-pointer">
+        <summary className="font-medium text-gray-700 text-sm select-none">View expected JSON format</summary>
+        <pre className="mt-3 text-xs bg-gray-50 rounded-lg p-4 overflow-auto text-gray-600 leading-relaxed">
+{EXAMPLE_JSON}
+        </pre>
+        <p className="text-xs text-green-600 mt-2">✓ No need to include <code>topic_id</code> — you select it from the dropdown above.</p>
+      </details>
+    </div>
+  );
+}
+
+// ─── Manual entry tab ─────────────────────────────────────
+function ManualEntryTab({ subjects }: { subjects: Subject[] }) {
+  const router = useRouter();
+  const [subjectId, setSubjectId] = useState("");
+  const [topicId, setTopicId] = useState("");
+  const [testName, setTestName] = useState("");
+  const [testDesc, setTestDesc] = useState("");
+  const [timeLimit, setTimeLimit] = useState("");
+  const [questions, setQuestions] = useState<QuestionForm[]>([defaultQuestion()]);
+  const [collapsed, setCollapsed] = useState<Set<number>>(new Set());
+
+  const createTest = useMutation({
+    mutationFn: () => testsApi.create({
+      name: testName,
+      description: testDesc,
+      topic_id: topicId,
+      time_limit_minutes: timeLimit ? parseInt(timeLimit) : null,
+      questions: questions.map((q, i) => ({ ...q, order_index: i })),
+    }),
+    onSuccess: () => { toast.success("Test created!"); router.push("/tests"); },
+    onError: (e: any) => toast.error(e.response?.data?.detail || "Failed to create test"),
+  });
+
+  const updateQuestion = (i: number, field: string, value: any) =>
+    setQuestions(qs => qs.map((q, idx) => idx === i ? { ...q, [field]: value } : q));
+
+  const updateOption = (qi: number, oi: number, field: string, value: any) =>
+    setQuestions(qs => qs.map((q, idx) => {
+      if (idx !== qi) return q;
