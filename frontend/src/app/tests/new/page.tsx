@@ -338,3 +338,63 @@ function ManualEntryTab({ subjects }: { subjects: Subject[] }) {
                   onChange={e => updateQuestion(qi, "question_type", e.target.value as "MCQ" | "MSQ")}
                 >
                   <option value="MCQ">MCQ — single correct</option>
+                  <option value="MSQ">MSQ — multiple correct</option>
+                </select>
+                <button onClick={() => toggleCollapse(qi)} className="p-1.5 text-gray-400 hover:text-gray-600 rounded">
+                  {collapsed.has(qi) ? <ChevronDown size={16} /> : <ChevronUp size={16} />}
+                </button>
+                {questions.length > 1 && (
+                  <button onClick={() => setQuestions(qs => qs.filter((_, i) => i !== qi))} className="p-1.5 text-gray-400 hover:text-red-500 rounded">
+                    <Trash2 size={14} />
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {!collapsed.has(qi) && (
+              <>
+                <textarea
+                  className="input resize-none mb-4"
+                  rows={2}
+                  placeholder="Question text..."
+                  value={q.text}
+                  onChange={e => updateQuestion(qi, "text", e.target.value)}
+                />
+
+                <p className="text-xs text-gray-400 mb-2">
+                  {q.question_type === "MCQ"
+                    ? "🔘 Select the ONE correct answer"
+                    : "☑ Select ALL correct answers (minimum 2)"}
+                </p>
+
+                <div className="space-y-2 mb-4">
+                  {q.options.map((opt, oi) => (
+                    <div key={oi} className="flex items-center gap-2">
+                      <input
+                        type={q.question_type === "MCQ" ? "radio" : "checkbox"}
+                        name={`q${qi}-correct`}
+                        checked={opt.is_correct}
+                        onChange={e => updateOption(qi, oi, "is_correct", e.target.checked)}
+                        className="w-4 h-4 text-primary-600 shrink-0"
+                      />
+                      <span className="text-xs text-gray-400 font-medium w-4">{opt.id}.</span>
+                      <input
+                        className={clsx("input flex-1 text-sm py-1.5", opt.is_correct && "border-green-400 bg-green-50")}
+                        placeholder={`Option ${opt.id}`}
+                        value={opt.text}
+                        onChange={e => updateOption(qi, oi, "text", e.target.value)}
+                      />
+                      {q.options.length > 2 && (
+                        <button onClick={() => updateQuestion(qi, "options", q.options.filter((_, i) => i !== oi))} className="p-1 text-gray-400 hover:text-red-500">
+                          <Trash2 size={12} />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                  <button
+                    onClick={() => {
+                      const nextId = String.fromCharCode(97 + q.options.length);
+                      updateQuestion(qi, "options", [...q.options, { id: nextId, text: "", is_correct: false }]);
+                    }}
+                    className="text-xs text-primary-600 hover:text-primary-700 flex items-center gap-1 mt-1 px-1"
+                  >
