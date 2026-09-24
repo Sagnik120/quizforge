@@ -278,3 +278,63 @@ function ManualEntryTab({ subjects }: { subjects: Subject[] }) {
   const updateOption = (qi: number, oi: number, field: string, value: any) =>
     setQuestions(qs => qs.map((q, idx) => {
       if (idx !== qi) return q;
+      const opts = q.options.map((o, oidx) => {
+        if (oidx !== oi) return (field === "is_correct" && q.question_type === "MCQ" && value) ? { ...o, is_correct: false } : o;
+        return { ...o, [field]: value };
+      });
+      return { ...q, options: opts };
+    }));
+
+  const toggleCollapse = (i: number) =>
+    setCollapsed(s => { const n = new Set(s); n.has(i) ? n.delete(i) : n.add(i); return n; });
+
+  // ── Validation ──────────────────────────────────────────
+  const questionsValid = questions.every(q => {
+    const hasText = q.text.trim().length > 0;
+    const correctCount = q.options.filter(o => o.is_correct).length;
+    const hasCorrect = q.question_type === "MCQ" ? correctCount === 1 : correctCount >= 2;
+    const allOptionsFilled = q.options.every(o => o.text.trim().length > 0);
+    return hasText && hasCorrect && allOptionsFilled;
+  });
+
+  const buttonLabel = () => {
+    if (createTest.isPending) return "Creating...";
+    if (!testName) return "⚠ Enter a test name first";
+    if (!topicId) return "⚠ Select a topic first";
+    if (!questionsValid) return "⚠ Fill all questions & mark correct answers";
+    return `Create Test (${questions.length} question${questions.length > 1 ? "s" : ""})`;
+  };
+
+  return (
+    <div className="space-y-4">
+      {/* Test details */}
+      <div className="card space-y-4">
+        <h2 className="font-semibold text-gray-800">Test Details</h2>
+        <div>
+          <label className="label">Test Name *</label>
+          <input className="input" value={testName} onChange={e => setTestName(e.target.value)} placeholder="e.g. Newton's Laws MCQ" />
+        </div>
+        <div>
+          <label className="label">Description</label>
+          <textarea className="input resize-none" rows={2} value={testDesc} onChange={e => setTestDesc(e.target.value)} placeholder="Optional description" />
+        </div>
+        <TopicSelector subjects={subjects} subjectId={subjectId} topicId={topicId} onSubjectChange={setSubjectId} onTopicChange={setTopicId} />
+        <div>
+          <label className="label">Time Limit (minutes)</label>
+          <input className="input" type="number" min={1} value={timeLimit} onChange={e => setTimeLimit(e.target.value)} placeholder="Leave empty for no limit" />
+        </div>
+      </div>
+
+      {/* Questions */}
+      <div className="space-y-4">
+        {questions.map((q, qi) => (
+          <div key={qi} className="card">
+            <div className="flex items-center justify-between mb-3">
+              <span className="font-medium text-gray-700 text-sm">Question {qi + 1}</span>
+              <div className="flex gap-2 items-center">
+                <select
+                  className="text-xs border border-gray-200 rounded-lg px-2 py-1 bg-white"
+                  value={q.question_type}
+                  onChange={e => updateQuestion(qi, "question_type", e.target.value as "MCQ" | "MSQ")}
+                >
+                  <option value="MCQ">MCQ — single correct</option>
