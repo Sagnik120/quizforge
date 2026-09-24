@@ -398,3 +398,80 @@ function ManualEntryTab({ subjects }: { subjects: Subject[] }) {
                     }}
                     className="text-xs text-primary-600 hover:text-primary-700 flex items-center gap-1 mt-1 px-1"
                   >
+                    <Plus size={12} /> Add option
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-3 gap-3">
+                  <div>
+                    <label className="label text-xs">Marks</label>
+                    <input type="number" className="input text-sm" min={1} value={q.marks} onChange={e => updateQuestion(qi, "marks", parseInt(e.target.value) || 1)} />
+                  </div>
+                  <div>
+                    <label className="label text-xs">Negative marks</label>
+                    <input type="number" className="input text-sm" min={0} value={q.negative_marks} onChange={e => updateQuestion(qi, "negative_marks", parseInt(e.target.value) || 0)} />
+                  </div>
+                  <div>
+                    <label className="label text-xs">Explanation (optional)</label>
+                    <input className="input text-sm" value={q.explanation} onChange={e => updateQuestion(qi, "explanation", e.target.value)} placeholder="Why is this the answer?" />
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        ))}
+      </div>
+
+      <button onClick={() => setQuestions(qs => [...qs, defaultQuestion()])} className="btn-secondary w-full flex items-center justify-center gap-2">
+        <Plus size={16} /> Add Question
+      </button>
+
+      <button
+        className="btn-primary w-full text-base py-3"
+        onClick={() => createTest.mutate()}
+        disabled={createTest.isPending || !testName || !topicId || !questionsValid}
+      >
+        {buttonLabel()}
+      </button>
+    </div>
+  );
+}
+
+// ─── Main page ────────────────────────────────────────────
+export default function NewTestPage() {
+  const [tab, setTab] = useState<"manual" | "json">("manual");
+
+  const { data: subjects = [] } = useQuery<Subject[]>({
+    queryKey: ["subjects"],
+    queryFn: () => subjectsApi.list().then(r => r.data),
+  });
+
+  return (
+    <AppLayout>
+      <div className="max-w-3xl mx-auto">
+        <div className="mb-6">
+          <h1 className="text-2xl font-bold text-gray-900">Create New Test</h1>
+          <p className="text-gray-500 mt-1">Fill the form, paste JSON, or upload a JSON file. Pick a common subject to share the test.</p>
+        </div>
+
+        <div className="flex gap-1 mb-6 bg-gray-100 p-1 rounded-xl w-fit">
+          <button
+            onClick={() => setTab("manual")}
+            className={clsx("px-5 py-2 rounded-lg text-sm font-medium transition-colors", tab === "manual" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700")}
+          >
+            Manual Entry
+          </button>
+          <button
+            onClick={() => setTab("json")}
+            className={clsx("px-5 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2", tab === "json" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700")}
+          >
+            <FileJson size={15} /> Import JSON
+          </button>
+        </div>
+
+        {tab === "manual" && <ManualEntryTab subjects={subjects} />}
+        {tab === "json" && <JSONImportTab subjects={subjects} />}
+      </div>
+    </AppLayout>
+  );
+}
