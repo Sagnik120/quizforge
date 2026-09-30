@@ -128,3 +128,43 @@ function TestAttempt({ testId, onDone }: { testId: string; onDone: (result: Atte
     setCurrentQ(idx);
   };
 
+  const formatTime = (s: number) => `${Math.floor(s / 60).toString().padStart(2, "0")}:${(s % 60).toString().padStart(2, "0")}`;
+
+  return (
+    <div className="max-w-3xl mx-auto">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h2 className="font-semibold text-gray-800">{test.name}</h2>
+          <p className="text-sm text-gray-500">Question {currentQ + 1} of {questions.length}</p>
+        </div>
+        <div className="flex items-center gap-3">
+          <span className="flex items-center gap-1.5 text-sm font-mono bg-gray-100 px-3 py-1.5 rounded-lg">
+            <Clock size={14} /> {formatTime(elapsed)}
+          </span>
+          <button
+            onClick={() => { if (confirm("Submit test now?")) submitMutation.mutate(); }}
+            className="btn-primary text-sm"
+            disabled={submitMutation.isPending}
+          >
+            {submitMutation.isPending ? "Submitting..." : "Submit Test"}
+          </button>
+        </div>
+      </div>
+
+      {/* Question nav dots */}
+      <div className="flex flex-wrap gap-2 mb-6">
+        {questions.map((_, i) => (
+          <button
+            key={i}
+            onClick={() => goTo(i)}
+            className={clsx(
+              "w-8 h-8 rounded-lg text-xs font-medium transition-colors",
+              i === currentQ ? "bg-primary-500 text-white" :
+              answers[questions[i].id]?.length ? "bg-green-100 text-green-700" :
+              "bg-gray-100 text-gray-500 hover:bg-gray-200"
+            )}
+          >
+            {i + 1}
+          </button>
+        ))}
