@@ -168,3 +168,43 @@ function TestAttempt({ testId, onDone }: { testId: string; onDone: (result: Atte
             {i + 1}
           </button>
         ))}
+      </div>
+
+      {/* Question card */}
+      <div className="card mb-4">
+        <div className="flex items-center gap-2 mb-4">
+          <span className={clsx("text-xs px-2.5 py-0.5 rounded-full font-medium", q.question_type === "MCQ" ? "bg-blue-100 text-blue-700" : "bg-purple-100 text-purple-700")}>
+            {q.question_type}
+          </span>
+          <span className="text-xs text-gray-400">{q.marks} mark{q.marks > 1 ? "s" : ""}</span>
+          {q.negative_marks > 0 && <span className="text-xs text-red-400">−{q.negative_marks} negative</span>}
+        </div>
+
+        <p className="text-gray-800 font-medium mb-5 leading-relaxed">{q.text}</p>
+
+        <div className="space-y-2.5">
+          {q.options.map(opt => (
+            <button
+              key={opt.id}
+              onClick={() => toggleOption(opt.id)}
+              className={clsx(
+                "w-full text-left flex items-start gap-3 p-3.5 rounded-xl border transition-all",
+                selected.includes(opt.id)
+                  ? "border-primary-400 bg-primary-50 text-primary-800"
+                  : "border-gray-200 hover:border-gray-300 hover:bg-gray-50"
+              )}
+            >
+              <span className={clsx(
+                "w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 mt-0.5 text-xs font-bold",
+                selected.includes(opt.id) ? "border-primary-500 bg-primary-500 text-white" : "border-gray-300"
+              )}>
+                {opt.id}
+              </span>
+              <span className="text-sm">{opt.text}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Nav buttons */}
+      <div className="flex justify-between">
