@@ -43,3 +43,43 @@ function TestSelector({ onSelect }: { onSelect: (id: string) => void }) {
         {tests.length > 0 && (
           <div>
             <label className="label">Test</label>
+            <div className="space-y-2">
+              {tests.map((t: any) => (
+                <button
+                  key={t.id}
+                  onClick={() => onSelect(t.id)}
+                  className="w-full text-left border border-gray-200 hover:border-primary-400 hover:bg-primary-50 rounded-xl p-4 transition-colors"
+                >
+                  <p className="font-medium text-gray-800">{t.name}</p>
+                  <p className="text-xs text-gray-400 mt-1">
+                    {t.total_questions} questions · {t.total_marks} marks
+                    {t.time_limit_minutes ? ` · ${t.time_limit_minutes} min` : ""} · {t.attempt_count} attempts
+                  </p>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+        {tests.length === 0 && (topicId || subjectId) && (
+          <p className="text-sm text-gray-400 text-center py-4">No tests found in this selection.</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Test in progress ────────────────────────────────────
+function TestAttempt({ testId, onDone }: { testId: string; onDone: (result: AttemptResult) => void }) {
+  const router = useRouter();
+  const [attemptId, setAttemptId] = useState<string | null>(null);
+  const [currentQ, setCurrentQ] = useState(0);
+  const [answers, setAnswers] = useState<Record<string, string[]>>({});
+  const [timers, setTimers] = useState<Record<string, number>>({});
+  const [elapsed, setElapsed] = useState(0);
+  const startRef = useRef(Date.now());
+  const qStartRef = useRef(Date.now());
+
+  const { data: test } = useQuery({
+    queryKey: ["test-attempt", testId],
+    queryFn: () => testsApi.getForAttempt(testId).then(r => r.data),
+  });
