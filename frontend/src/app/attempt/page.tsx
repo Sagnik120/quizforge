@@ -83,3 +83,48 @@ function TestAttempt({ testId, onDone }: { testId: string; onDone: (result: Atte
     queryKey: ["test-attempt", testId],
     queryFn: () => testsApi.getForAttempt(testId).then(r => r.data),
   });
+
+  const startMutation = useMutation({
+    mutationFn: () => attemptsApi.start(testId).then(r => r.data),
+    onSuccess: (d) => setAttemptId(d.attempt_id),
+  });
+
+  const submitMutation = useMutation({
+    mutationFn: () => {
+      const ans = Object.entries(answers).map(([question_id, selected_options]) => ({
+        question_id, selected_options, time_spent_seconds: timers[question_id] || 0,
+      }));
+      return attemptsApi.submit(attemptId!, ans).then(r => r.data);
+    },
+    onSuccess: (result) => onDone(result),
+    onError: () => toast.error("Submission failed"),
+  });
+
+  useEffect(() => { startMutation.mutate(); }, [testId]);
+
+  useEffect(() => {
+    const t = setInterval(() => setElapsed(Math.floor((Date.now() - startRef.current) / 1000)), 1000);
+    return () => clearInterval(t);
+  }, []);
+
+  if (!test || !attemptId) return <div className="text-center py-20 text-gray-400">Loading test...</div>;
+
+  const questions: QuestionPublic[] = test.questions;
+  const q = questions[currentQ];
+  const selected = answers[q.id] || [];
+
+  const toggleOption = (optId: string) => {
+    setAnswers(prev => {
+      const cur = prev[q.id] || [];
+      if (q.question_type === "MCQ") return { ...prev, [q.id]: [optId] };
+      return { ...prev, [q.id]: cur.includes(optId) ? cur.filter(x => x !== optId) : [...cur, optId] };
+    });
+  };
+
+  const goTo = (idx: number) => {
+    const spent = Math.floor((Date.now() - qStartRef.current) / 1000);
+    setTimers(t => ({ ...t, [q.id]: (t[q.id] || 0) + spent }));
+    qStartRef.current = Date.now();
+    setCurrentQ(idx);
+  };
+
