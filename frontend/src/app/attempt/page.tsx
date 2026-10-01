@@ -208,3 +208,43 @@ function TestAttempt({ testId, onDone }: { testId: string; onDone: (result: Atte
 
       {/* Nav buttons */}
       <div className="flex justify-between">
+        <button onClick={() => goTo(currentQ - 1)} disabled={currentQ === 0} className="btn-secondary flex items-center gap-2 disabled:opacity-40">
+          <ChevronLeft size={16} /> Previous
+        </button>
+        <button onClick={() => goTo(currentQ + 1)} disabled={currentQ === questions.length - 1} className="btn-secondary flex items-center gap-2 disabled:opacity-40">
+          Next <ChevronRight size={16} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Result screen ───────────────────────────────────────
+function ResultScreen({ result, onRetry }: { result: AttemptResult; onRetry: () => void }) {
+  const router = useRouter();
+  const pct = result.percentage;
+  const color = pct >= 75 ? "text-green-600" : pct >= 50 ? "text-yellow-600" : "text-red-600";
+  const bg = pct >= 75 ? "bg-green-50" : pct >= 50 ? "bg-yellow-50" : "bg-red-50";
+
+  return (
+    <div className="max-w-2xl mx-auto">
+      <div className={`card text-center mb-6 ${bg} border-0`}>
+        <p className="text-5xl font-bold mb-2 mt-2">{pct >= 75 ? "🎉" : pct >= 50 ? "👍" : "📚"}</p>
+        <h2 className="text-xl font-bold text-gray-800 mb-1">{result.test_name}</h2>
+        <p className={`text-5xl font-bold mt-4 mb-2 ${color}`}>{pct.toFixed(1)}%</p>
+        <p className="text-gray-500">{result.score} / {result.max_score} marks</p>
+      </div>
+
+      <div className="grid grid-cols-3 gap-4 mb-6">
+        <div className="card text-center">
+          <p className="text-2xl font-bold text-green-600">{result.correct_count}</p>
+          <p className="text-xs text-gray-500 mt-1">Correct</p>
+        </div>
+        <div className="card text-center">
+          <p className="text-2xl font-bold text-red-500">{result.wrong_count}</p>
+          <p className="text-xs text-gray-500 mt-1">Wrong</p>
+        </div>
+        <div className="card text-center">
+          <p className="text-2xl font-bold text-gray-400">{result.unattempted_count}</p>
+          <p className="text-xs text-gray-500 mt-1">Skipped</p>
+        </div>
