@@ -248,3 +248,33 @@ function ResultScreen({ result, onRetry }: { result: AttemptResult; onRetry: () 
           <p className="text-2xl font-bold text-gray-400">{result.unattempted_count}</p>
           <p className="text-xs text-gray-500 mt-1">Skipped</p>
         </div>
+      </div>
+
+      <div className="flex gap-3 mb-6">
+        <button onClick={onRetry} className="btn-primary flex-1">Attempt Again</button>
+        <button onClick={() => router.push("/analytics")} className="btn-secondary flex-1">View Analytics</button>
+      </div>
+
+      {/* Answer review */}
+      <div className="card">
+        <h3 className="font-semibold text-gray-800 mb-4">Answer Review</h3>
+        <div className="space-y-4">
+          {result.answers.map((a, i) => (
+            <div key={a.question_id} className={clsx("p-4 rounded-xl", a.is_correct ? "bg-green-50" : a.selected_options.length ? "bg-red-50" : "bg-gray-50")}>
+              <div className="flex items-center gap-2 mb-1">
+                {a.is_correct ? <CheckCircle2 size={16} className="text-green-600" /> : a.selected_options.length ? <XCircle size={16} className="text-red-500" /> : <AlertCircle size={16} className="text-gray-400" />}
+                <span className="text-xs font-medium text-gray-500">Q{i + 1}</span>
+                <span className={clsx("text-xs font-semibold ml-auto", a.marks_awarded > 0 ? "text-green-700" : a.marks_awarded < 0 ? "text-red-700" : "text-gray-400")}>
+                  {a.marks_awarded > 0 ? "+" : ""}{a.marks_awarded}
+                </span>
+              </div>
+              <p className="text-xs text-gray-600">
+                Correct: <span className="text-green-700 font-medium">{a.correct_options.join(", ")}</span>
+                {a.selected_options.length > 0 && !a.is_correct && (
+                  <> · Your answer: <span className="text-red-600 font-medium">{a.selected_options.join(", ")}</span></>
+                )}
+              </p>
+              {a.explanation && <p className="text-xs text-gray-500 mt-1 italic">{a.explanation}</p>}
+            </div>
+          ))}
+        </div>
