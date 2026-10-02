@@ -278,3 +278,42 @@ function ResultScreen({ result, onRetry }: { result: AttemptResult; onRetry: () 
             </div>
           ))}
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Main page ───────────────────────────────────────────
+function AttemptFlow() {
+  const qc = useQueryClient();
+  const searchParams = useSearchParams();
+  const [testId, setTestId] = useState<string | null>(searchParams.get("test_id"));
+  const [result, setResult] = useState<AttemptResult | null>(null);
+  const [key, setKey] = useState(0);
+
+  const handleRetry = () => { setResult(null); setKey(k => k + 1); };
+
+  return (
+    <AppLayout>
+      {!testId && <TestSelector onSelect={setTestId} />}
+      {testId && !result && (
+        <TestAttempt
+          key={`${testId}-${key}`}
+          testId={testId}
+          // a finished attempt changes scores, streaks and weak areas everywhere
+          onDone={(r) => { setResult(r); qc.invalidateQueries(); }}
+        />
+      )}
+      {result && <ResultScreen result={result} onRetry={handleRetry} />}
+    </AppLayout>
+  );
+}
+
+// useSearchParams needs a Suspense boundary for the production build
+export default function AttemptPage() {
+  return (
+    <Suspense fallback={<Loader label="Loading test" />}>
+      <AttemptFlow />
+    </Suspense>
+  );
+}
