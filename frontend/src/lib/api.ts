@@ -88,3 +88,36 @@ export const analyticsApi = {
   resolveRevision: (itemId: string) =>
     api.patch(`/analytics/revision-queue/${itemId}/resolve`),
 };
+
+// ─── Leaderboard ───────────────────────────────────────
+export const leaderboardApi = {
+  get: () => api.get("/leaderboard/"),
+  profileStats: () => api.get("/leaderboard/profile-stats"),
+};
+
+// ─── Profile ───────────────────────────────────────────
+export const profileApi = {
+  get: () => api.get("/profile/"),
+  update: (data: any) => api.put("/profile/", data),
+};
+
+// ─── Goals, calendar, overview ─────────────────────────
+export const goalsApi = {
+  list: () => api.get("/goals"),
+  create: (data: { title: string; parent_id?: string | null; space: string }) =>
+    api.post("/goals", data),
+  rename: (id: string, title: string) => api.put(`/goals/${id}`, { title }),
+  toggle: (id: string) => api.post(`/goals/${id}/toggle`),
+  delete: (id: string) => api.delete(`/goals/${id}`),
+};
+
+export const calendarApi = {
+  month: (month: string) => api.get("/calendar", { params: { month } }),
+  addReminder: (data: any) => api.post("/calendar/reminders", data),
+  updateReminder: (id: string, data: any) => api.patch(`/calendar/reminders/${id}`, data),
+  deleteReminder: (id: string) => api.delete(`/calendar/reminders/${id}`),
+};
+
+export const overviewApi = {
+  get: () => api.get("/overview"),
+};
