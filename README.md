@@ -198,3 +198,73 @@ npx vercel
       "explanation": "Newton's Second Law: F = ma",
       "marks": 2,
       "negative_marks": 0
+    },
+    {
+      "question_type": "MSQ",
+      "text": "Which are scalar quantities?",
+      "options": [
+        {"id": "a", "text": "Speed",    "is_correct": true},
+        {"id": "b", "text": "Velocity", "is_correct": false},
+        {"id": "c", "text": "Mass",     "is_correct": true},
+        {"id": "d", "text": "Force",    "is_correct": false}
+      ],
+      "marks": 3,
+      "negative_marks": 1
+    }
+  ]
+}
+```
+
+---
+
+## DB Schema
+
+```
+users
+  id, email, username, hashed_password, full_name, bio, institution
+  current_streak, longest_streak, last_activity_date
+
+subjects
+  id, name, description, color, owner_id → users.id
+
+topics
+  id, name, description, subject_id → subjects.id
+
+tests
+  id, name, description, topic_id → topics.id, creator_id → users.id
+  time_limit_minutes, is_published
+
+questions
+  id, test_id → tests.id, question_type (MCQ/MSQ), text
+  options (JSON array), explanation, marks, negative_marks, order_index
+
+attempts
+  id, test_id, user_id, status, score, max_score, percentage
+  time_taken_seconds, started_at, completed_at
+
+attempt_answers
+  id, attempt_id, question_id, selected_options (JSON), is_correct, marks_awarded
+
+revision_queue
+  id, user_id, question_id, wrong_count, last_wrong_at, is_resolved
+```
+
+
+## PrepDuo: placement prep for two
+
+The app now opens on two buttons (Sagnik, Shrusti) instead of a login form. Everything lives in one of two spaces:
+
+- **Private**: your own subjects, tests, goals and reminders.
+- **Common**: shared with your partner. Tests record attempts per person, goals are ticked per person.
+
+Hierarchy: Subject > Topic > Sub-topic > Tests (MCQ/MSQ). Tests can be made by form, pasted JSON or an uploaded JSON file.
+A day counts toward the streak when you finish a test or tick a goal (days are counted in IST; change `TZ_OFFSET_MINUTES`).
+
+### Deploy for free
+
+1. **Database (Neon)**: create a free project at neon.tech and copy the *direct* connection string (not the `-pooler` one).
+2. **Backend (Render)**: New > Blueprint, pick this repo (`render.yaml` is included). Set `DATABASE_URL` to the Neon string,
+   `BACKEND_CORS_ORIGINS` to `["https://<your-app>.vercel.app"]` and, ideally, `APP_PASSCODE`.
+3. **Frontend (Vercel)**: import the repo with root directory `frontend` and set `NEXT_PUBLIC_API_URL` to the Render URL.
+
+Do not use SQLite on Render: the free disk is wiped on every deploy and restart. Tables are created automatically on first start.
