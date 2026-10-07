@@ -3,11 +3,11 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { addMonths, format, getDay, getDaysInMonth, parseISO, startOfMonth } from "date-fns";
 import { toast } from "sonner";
-import { ChevronLeft, ChevronRight, Flame, Trash2, Check } from "lucide-react";
+import { CalendarDays, ChevronLeft, ChevronRight, Flame, Trash2, Check } from "lucide-react";
 import { clsx } from "clsx";
 import { calendarApi } from "@/lib/api";
 import { AppLayout } from "@/components/layout/AppLayout";
-import { Loader, SpaceBadge, personColor } from "@/components/ui";
+import { Loader, PageHeader, SpaceBadge, personColor } from "@/components/ui";
 
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
@@ -42,19 +42,17 @@ export default function CalendarPage() {
   return (
     <AppLayout>
       <div className="max-w-5xl mx-auto space-y-5">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Calendar</h1>
-          <p className="text-gray-500 mt-1">A day lights up when you finish a test or tick a goal. Keep the streak alive.</p>
-        </div>
+        <PageHeader icon={CalendarDays} tint="bg-orange-50 text-orange-600" title="Calendar"
+          subtitle="A day lights up when you finish a test or tick a goal. Ticking a reminder only ticks it for you." />
 
         {!data ? <Loader label="Loading calendar" /> : (
           <>
-            <div className="grid grid-cols-2 gap-4 stagger">
+            <div className="grid sm:grid-cols-2 gap-3 sm:gap-4 stagger">
               {data.users.map((u: any) => (
                 <div key={u.id} className="card lift flex items-center gap-3 !py-4">
                   <span className={clsx("text-orange-500", u.current_streak > 0 && "flame")}><Flame size={26} /></span>
-                  <div className="flex-1">
-                    <p className="font-semibold text-gray-900">{u.full_name}</p>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-gray-900 truncate">{u.full_name}</p>
                     <p className="text-xs text-gray-500">best {u.longest_streak} days · {u.active_days.length} active this month</p>
                   </div>
                   <p className="text-2xl font-bold" style={{ color: personColor(u.username) }}>{u.current_streak}<span className="text-xs font-normal text-gray-400"> day streak</span></p>
@@ -72,17 +70,17 @@ export default function CalendarPage() {
                   </h2>
                   <button aria-label="Next month" className="btn-secondary !p-2" onClick={() => setCursor(addMonths(cursor, 1))}><ChevronRight size={16} /></button>
                 </div>
-                <div className="grid grid-cols-7 gap-1.5 text-center text-xs text-gray-400 mb-1.5">
+                <div className="grid grid-cols-7 gap-1 sm:gap-1.5 text-center text-xs text-gray-400 mb-1.5">
                   {WEEKDAYS.map((d) => <div key={d}>{d}</div>)}
                 </div>
-                <div key={month} className="grid grid-cols-7 gap-1.5 animate-in">
+                <div key={month} className="grid grid-cols-7 gap-1 sm:gap-1.5 animate-in">
                   {Array.from({ length: blanks }, (_, i) => <div key={`b${i}`} />)}
                   {days.map((iso) => {
                     const active = data.month === month ? data.users.filter((u: any) => u.active_days.includes(iso)) : [];
                     const due = data.month === month ? remindersOn(iso) : [];
                     return (
                       <button key={iso} onClick={() => setPicked(iso)}
-                        className={clsx("h-16 rounded-lg border text-left p-1.5 flex flex-col transition-all hover:border-primary-300 hover:-translate-y-0.5",
+                        className={clsx("h-14 sm:h-16 rounded-lg border text-left p-1 sm:p-1.5 flex flex-col transition-all hover:border-primary-300 hover:-translate-y-0.5",
                           iso === day ? "border-primary-500 ring-2 ring-primary-100" : "border-gray-100",
                           active.length ? "bg-orange-50/60" : "bg-white")}>
                         <span className={clsx("text-xs font-medium", iso === data.today ? "bg-primary-500 text-white rounded-full w-5 h-5 flex items-center justify-center" : "text-gray-700")}>
@@ -102,7 +100,7 @@ export default function CalendarPage() {
                     );
                   })}
                 </div>
-                <div className="flex gap-4 mt-4 text-xs text-gray-500">
+                <div className="flex flex-wrap gap-x-4 gap-y-1 mt-4 text-xs text-gray-500">
                   {data.users.map((u: any) => (
                     <span key={u.id} className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full" style={{ background: personColor(u.username) }} />{u.full_name} active</span>
                   ))}
@@ -133,7 +131,7 @@ export default function CalendarPage() {
                       <button role="checkbox" aria-checked={r.done} aria-label={`Mark ${r.title} done`}
                         onClick={() => run.mutate(() => calendarApi.updateReminder(r.id, { done: !r.done }))}
                         className={clsx("w-5 h-5 rounded-md border-2 flex items-center justify-center shrink-0 transition-colors",
-                          r.done ? "bg-green-500 border-green-500 text-white" : "border-gray-300 hover:border-primary-500")}>
+                          r.done ? "bg-green-500 border-green-500 text-white ripple" : "border-gray-300 hover:border-primary-500")}>
                         {r.done && <Check size={13} strokeWidth={3} className="pop" />}
                       </button>
                       <span className={clsx("flex-1 text-sm", r.done ? "line-through text-gray-400" : "text-gray-800")}>{r.title}</span>

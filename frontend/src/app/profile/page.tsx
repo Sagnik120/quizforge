@@ -1,4 +1,6 @@
 "use client";
+import { PageHeader } from "@/components/ui";
+import { UserRound } from "lucide-react";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -35,7 +37,7 @@ export default function ProfilePage() {
   return (
     <AppLayout>
       <div className="max-w-2xl mx-auto">
-        <h1 className="text-2xl font-bold text-gray-900 mb-6">Profile</h1>
+        <div className="mb-6"><PageHeader icon={UserRound} tint="bg-green-50 text-green-600" title="Profile" /></div>
 
         {/* Avatar + streak */}
         <div className="card mb-6 flex items-center gap-6">
