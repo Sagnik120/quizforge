@@ -9,23 +9,29 @@
 
 * { box-sizing: border-box; }
 
+/* Soft paper-like page with a faint dotted notebook grid: easy on the eyes */
 body {
-  background-color: #f8fafc;
-  color: #1e293b;
+  -webkit-tap-highlight-color: transparent;
+  overflow-x: hidden;
+  background-color: #f6f8fc;
+  background-image: radial-gradient(#e4e9f5 1px, transparent 1px);
+  background-size: 22px 22px;
+  color: #334155;
 }
 
 @layer components {
   .btn-primary {
-    @apply bg-primary-500 hover:bg-primary-600 text-white font-medium px-4 py-2 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed;
+    @apply bg-primary-500 hover:bg-primary-600 text-white font-medium px-4 py-2.5 sm:py-2 rounded-xl shadow-sm shadow-primary-500/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed;
   }
   .btn-secondary {
-    @apply bg-white hover:bg-gray-50 text-gray-700 font-medium px-4 py-2 rounded-lg border border-gray-200 transition-colors;
+    @apply bg-white hover:bg-gray-50 text-gray-700 font-medium px-4 py-2.5 sm:py-2 rounded-xl border border-gray-200 transition-colors disabled:opacity-40;
   }
   .card {
-    @apply bg-white rounded-xl border border-gray-100 shadow-sm p-6;
+    @apply bg-white rounded-2xl border border-slate-100 p-4 sm:p-6;
+    box-shadow: 0 1px 2px rgb(15 23 42 / .04), 0 8px 24px -16px rgb(79 70 229 / .18);
   }
   .input {
-    @apply w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent;
+    @apply w-full border border-gray-200 rounded-xl px-3 py-2.5 sm:py-2 text-base sm:text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent;
   }
   .label {
     @apply block text-sm font-medium text-gray-700 mb-1;
@@ -33,25 +39,68 @@ body {
 }
 
 /* ─── Motion ─────────────────────────────────────────────── */
-@keyframes fade-up { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+/* page-turn: content tilts in from the top like a page being laid flat */
+@keyframes fade-up { from { opacity: 0; transform: perspective(900px) rotateX(-8deg) translateY(10px); } to { opacity: 1; transform: none; } }
+/* deal: cards land one after another like flashcards */
+@keyframes deal { from { opacity: 0; transform: translateY(16px) rotate(-1.5deg) scale(.98); } to { opacity: 1; transform: none; } }
+@keyframes marker { to { background-size: 100% 100%; } }
+@keyframes ripple { from { box-shadow: 0 0 0 0 rgb(34 197 94 / .45); } to { box-shadow: 0 0 0 12px rgb(34 197 94 / 0); } }
+@keyframes bob { 0%, 100% { transform: translateY(0) rotate(-3deg); } 50% { transform: translateY(-6px) rotate(3deg); } }
+@keyframes flip { 0% { transform: rotateY(0deg); } 55%, 100% { transform: rotateY(-180deg); } }
+@keyframes write { 0% { width: 0; } 70%, 100% { width: 100%; } }
+@keyframes slide-bar { 0% { transform: translateX(-100%); } 100% { transform: translateX(350%); } }
+@keyframes burst { 0% { opacity: 1; transform: translate(0, 0) rotate(0deg) scale(1); } 100% { opacity: 0; transform: translate(var(--dx), var(--dy)) rotate(var(--rot)) scale(.6); } }
+@keyframes ellipsis { 0% { content: ""; } 25% { content: "."; } 50% { content: ".."; } 75%, 100% { content: "..."; } }
 @keyframes pop { 0% { transform: scale(.6); } 60% { transform: scale(1.18); } 100% { transform: scale(1); } }
 @keyframes grow { from { transform: scaleX(0); } }
 @keyframes dot { 0%, 80%, 100% { transform: translateY(0); opacity: .35; } 40% { transform: translateY(-7px); opacity: 1; } }
 @keyframes shimmer { to { background-position: -200% 0; } }
 @keyframes flicker { 0%, 100% { transform: scale(1) rotate(-2deg); } 50% { transform: scale(1.12) rotate(3deg); } }
 
-.animate-in { animation: fade-up .35s ease-out both; }
-.stagger > * { animation: fade-up .4s ease-out both; }
+.animate-in { animation: fade-up .4s cubic-bezier(.2, .8, .2, 1) both; transform-origin: top center; }
+.stagger > * { animation: deal .45s cubic-bezier(.2, .8, .2, 1) both; }
 .stagger > *:nth-child(2) { animation-delay: .05s; }
 .stagger > *:nth-child(3) { animation-delay: .1s; }
 .stagger > *:nth-child(4) { animation-delay: .15s; }
 .stagger > *:nth-child(5) { animation-delay: .2s; }
 .stagger > *:nth-child(n+6) { animation-delay: .25s; }
+@keyframes sheet-up { from { opacity: 0; transform: translateY(24px) scale(.98); } to { opacity: 1; transform: none; } }
+@keyframes fade { from { opacity: 0; } to { opacity: 1; } }
+.sheet { animation: sheet-up .22s cubic-bezier(.2, .8, .2, 1) both; }
+.fade { animation: fade .18s ease-out both; }
+.ring-arc { transition: stroke-dashoffset .8s cubic-bezier(.2, .8, .2, 1); }
+.no-scrollbar { scrollbar-width: none; }
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.section-title { font-size: .75rem; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: #6b7280; }
 .pop { animation: pop .28s ease-out; }
+/* highlighter swipe under page titles */
+.marker { background: linear-gradient(transparent 60%, #fde68a 60%, #fde68a 92%, transparent 92%) no-repeat left / 0% 100%; animation: marker .7s .2s cubic-bezier(.2, .8, .2, 1) forwards; padding: 0 .15em; margin: 0 -.15em; }
+.ripple { animation: ripple .6s ease-out; }
+.bob { animation: bob 3s ease-in-out infinite; }
+
+/* Loader: an open book whose pages keep turning, with a line being written under it */
+.book { position: relative; width: 64px; height: 44px; perspective: 400px; }
+.book::before, .book::after, .book i { content: ""; position: absolute; top: 0; width: 50%; height: 100%; border: 2.5px solid var(--primary); background: #fff; }
+.book::before { left: 0; border-radius: 8px 2px 2px 8px; background: #eef2ff; }
+.book::after { right: 0; border-radius: 2px 8px 8px 2px; background: #eef2ff; }
+.book i { right: 0; z-index: 1; border-radius: 2px 8px 8px 2px; transform-origin: left center; animation: flip 1.4s cubic-bezier(.4, 0, .2, 1) infinite; backface-visibility: visible; }
+.book i:nth-child(2) { animation-delay: .22s; background: #fdf2f8; border-color: #f472b6; }
+.book i:nth-child(3) { animation-delay: .44s; background: #fffbeb; border-color: #fbbf24; }
+.writing { height: 3px; width: 64px; border-radius: 9999px; background: #e2e8f0; overflow: hidden; }
+.writing::after { content: ""; display: block; height: 100%; border-radius: 9999px; background: linear-gradient(90deg, #6366f1, #ec4899); animation: write 1.4s ease-in-out infinite; }
+.dots::after { content: ""; animation: ellipsis 1.4s steps(1) infinite; }
+
+/* Thin bar at the very top whenever anything is loading or saving */
+.top-progress { position: fixed; top: 0; left: 0; right: 0; height: 3px; z-index: 70; overflow: hidden; background: rgb(99 102 241 / .12); animation: fade .2s .15s both; }
+.top-progress::after { content: ""; position: absolute; inset: 0; width: 40%; border-radius: 9999px; background: linear-gradient(90deg, #6366f1, #ec4899, #f59e0b); animation: slide-bar 1.1s ease-in-out infinite; }
+
+.confetti { position: absolute; left: 50%; top: 40%; pointer-events: none; }
+.confetti span { position: absolute; width: 8px; height: 12px; border-radius: 2px; animation: burst 1.1s cubic-bezier(.2, .8, .3, 1) forwards; }
 .bar-fill { transform-origin: left; animation: grow .8s cubic-bezier(.2, .8, .2, 1) both; transition: width .5s ease; }
 .flame { display: inline-flex; animation: flicker 1.6s ease-in-out infinite; transform-origin: bottom center; }
 .lift { transition: transform .18s ease, box-shadow .18s ease; }
-.lift:hover { transform: translateY(-2px); box-shadow: 0 8px 24px -12px rgb(79 70 229 / .35); }
+.lift:hover { transform: translateY(-3px) rotate(-.3deg); box-shadow: 0 12px 28px -14px rgb(79 70 229 / .4); }
+.lift:active { transform: scale(.98); }
 .btn-primary, .btn-secondary { transition: transform .1s ease, background-color .15s ease; }
 .btn-primary:active, .btn-secondary:active { transform: scale(.96); }
 

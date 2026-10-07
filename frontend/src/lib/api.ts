@@ -1,6 +1,15 @@
 import axios from "axios";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const ENV_API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
+// Opened from another device (a phone on the same Wi-Fi), "localhost" would mean
+// that device, so reuse the host the page itself was loaded from.
+const API_URL =
+  typeof window !== "undefined" &&
+  /\/\/(localhost|127\.0\.0\.1)(:|\/|$)/.test(ENV_API_URL) &&
+  !["localhost", "127.0.0.1"].includes(window.location.hostname)
+    ? ENV_API_URL.replace(/localhost|127\.0\.0\.1/, window.location.hostname)
+    : ENV_API_URL;
 
 export const api = axios.create({
   baseURL: `${API_URL}/api/v1`,
