@@ -2,6 +2,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { analyticsApi } from "@/lib/api";
 import { AppLayout } from "@/components/layout/AppLayout";
+import { WeakAreas } from "@/components/WeakAreas";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { CheckCircle, BookMarked, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
@@ -29,6 +30,8 @@ export default function AnalyticsPage() {
     <AppLayout>
       <div className="max-w-6xl mx-auto space-y-6">
         <h1 className="text-2xl font-bold text-gray-900">Analytics</h1>
+
+        <WeakAreas />
 
         {/* Performance chart */}
         {analytics?.recent_performance?.length > 0 && (

@@ -5,7 +5,7 @@ Run with: pytest tests/ -v
 import pytest
 import asyncio
 from httpx import AsyncClient, ASGITransport
-from app.main import app
+from app.main import app, startup
 
 BASE = "/api/v1"
 
@@ -18,37 +18,26 @@ def event_loop():
 
 @pytest.fixture(scope="session")
 async def client():
+    await startup()  # create tables + seed people (ASGITransport skips lifespan events)
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
         yield c
 
 
 @pytest.fixture(scope="session")
 async def auth_headers(client):
-    """Register a test user and return auth headers."""
-    await client.post(f"{BASE}/auth/register", json={
-        "email": "test@quizforge.dev",
-        "username": "testuser",
-        "password": "testpass123",
-        "full_name": "Test User",
-    })
-    res = await client.post(f"{BASE}/auth/login", json={
-        "email": "test@quizforge.dev",
-        "password": "testpass123",
-    })
+    """Enter as one of the seeded people and return auth headers."""
+    res = await client.post(f"{BASE}/auth/quick-login", json={"username": "sagnik"})
     token = res.json()["access_token"]
     return {"Authorization": f"Bearer {token}"}
 
 
 # ─── Auth tests ───────────────────────────────────────────
 @pytest.mark.asyncio
-async def test_register(client):
+async def test_register_disabled(client):
     res = await client.post(f"{BASE}/auth/register", json={
-        "email": "new@quizforge.dev",
-        "username": "newuser",
-        "password": "pass1234",
+        "email": "x@quizforge.dev", "username": "stranger", "password": "testpass123",
     })
-    assert res.status_code == 201
-    assert "access_token" in res.json()
+    assert res.status_code == 403
 
 
 @pytest.mark.asyncio
@@ -215,3 +204,104 @@ async def test_leaderboard(client, auth_headers):
     res = await client.get(f"{BASE}/leaderboard/", headers=auth_headers)
     assert res.status_code == 200
     assert isinstance(res.json(), list)
+
+
+# ─── Spaces, goals, calendar ──────────────────────────────
+
+@pytest.fixture(scope="session")
+async def partner_headers(client):
+    res = await client.post(f"{BASE}/auth/quick-login", json={"username": "shrusti"})
+    return {"Authorization": f"Bearer {res.json()['access_token']}"}
+
+
+QUESTION = {"question_type": "MCQ", "text": "2+2?", "marks": 2, "options": [
+    {"id": "a", "text": "4", "is_correct": True}, {"id": "b", "text": "5", "is_correct": False}]}
+
+
+async def _subject_with_test(client, headers, space):
+    s = (await client.post(f"{BASE}/subjects/", json={"name": f"DSA {space}", "space": space}, headers=headers)).json()
+    t = (await client.post(f"{BASE}/subjects/{s['id']}/topics", json={"name": "Arrays"}, headers=headers)).json()
+    sub = await client.post(f"{BASE}/subjects/{s['id']}/topics", json={"name": "Two pointers", "parent_id": t["id"]}, headers=headers)
+    assert sub.status_code == 201 and sub.json()["parent_id"] == t["id"]
+    test = await client.post(f"{BASE}/tests/", json={"name": f"Quiz {space}", "topic_id": sub.json()["id"], "questions": [QUESTION]}, headers=headers)
+    assert test.status_code == 201
+    return s, sub.json(), test.json()
+
+
+@pytest.mark.asyncio
+async def test_private_space_is_hidden_from_partner(client, auth_headers, partner_headers):
+    s, _, test = await _subject_with_test(client, auth_headers, "private")
+    theirs = (await client.get(f"{BASE}/subjects/", headers=partner_headers)).json()
+    assert s["id"] not in [x["id"] for x in theirs]
+    assert (await client.get(f"{BASE}/tests/{test['id']}/attempt-view", headers=partner_headers)).status_code == 404
+    assert (await client.post(f"{BASE}/attempts/start", json={"test_id": test["id"]}, headers=partner_headers)).status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_common_space_shared_with_per_user_stats(client, auth_headers, partner_headers):
+    s, sub, test = await _subject_with_test(client, auth_headers, "common")
+    q = test["questions"][0]["id"]
+    # partner fails it, so it is flagged for retry only for them
+    a = (await client.post(f"{BASE}/attempts/start", json={"test_id": test["id"]}, headers=partner_headers)).json()
+    r = await client.post(f"{BASE}/attempts/{a['attempt_id']}/submit", json={"answers": [{"question_id": q, "selected_options": ["b"]}]}, headers=partner_headers)
+    assert r.status_code == 200 and r.json()["percentage"] == 0
+
+    theirs = {t["id"]: t for t in (await client.get(f"{BASE}/tests/", params={"space": "common"}, headers=partner_headers)).json()}[test["id"]]
+    assert theirs["attempt_count"] == 1 and theirs["needs_retry"] is True and theirs["creator_id"] != theirs["id"]
+    mine = {t["id"]: t for t in (await client.get(f"{BASE}/tests/", headers=auth_headers)).json()}[test["id"]]
+    assert mine["attempt_count"] == 0 and mine["needs_retry"] is False and mine["partner_attempt_count"] == 1
+
+    weak = (await client.get(f"{BASE}/analytics/weak-areas", headers=partner_headers)).json()
+    subj = next(x for x in weak if x["id"] == s["id"])
+    assert subj["percentage"] == 0 and subj["topics"][0]["subtopics"][0]["id"] == sub["id"]
+    assert subj["topics"][0]["subtopics"][0]["percentage"] == 0
+
+    # deleting the subject removes topics, tests, attempts and revision rows
+    assert (await client.delete(f"{BASE}/subjects/{s['id']}", headers=partner_headers)).status_code == 204
+
+
+@pytest.mark.asyncio
+async def test_goals_tree_and_progress(client, auth_headers, partner_headers):
+    async def add(title, parent=None, space="common", headers=auth_headers):
+        res = await client.post(f"{BASE}/goals", json={"title": title, "parent_id": parent, "space": space}, headers=headers)
+        return res
+    root = (await add("DBMS")).json()
+    topic = (await add("Normalization", root["id"])).json()
+    l1 = (await add("1NF", topic["id"])).json()
+    l2 = (await add("2NF", topic["id"])).json()
+    assert (await add("too deep", l1["id"])).status_code == 400
+    secret = (await add("My secret goal", space="private")).json()
+
+    assert (await client.post(f"{BASE}/goals/{l1['id']}/toggle", headers=auth_headers)).json()["done"] is True
+    assert (await client.post(f"{BASE}/goals/{root['id']}/toggle", headers=partner_headers)).json()["done"] is True
+
+    theirs = {g["id"]: g for g in (await client.get(f"{BASE}/goals", headers=partner_headers)).json()}
+    assert secret["id"] not in theirs and len(theirs[l2["id"]]["done_by"]) == 1 and len(theirs[l1["id"]]["done_by"]) == 2
+
+    people = {p["username"]: p for p in (await client.get(f"{BASE}/overview", headers=auth_headers)).json()["people"]}
+    assert people["sagnik"]["common_goals"] == {"done": 1, "total": 2}
+    assert people["shrusti"]["common_goals"] == {"done": 2, "total": 2}
+    assert people["sagnik"]["private_goals"]["total"] == 1 and people["shrusti"]["private_goals"]["total"] == 0
+    assert people["sagnik"]["current_streak"] >= 1 and people["sagnik"]["active_today"] is True
+
+    assert (await client.delete(f"{BASE}/goals/{root['id']}", headers=partner_headers)).status_code == 204
+    left = [g["id"] for g in (await client.get(f"{BASE}/goals", headers=auth_headers)).json()]
+    assert left == [secret["id"]]
+
+
+@pytest.mark.asyncio
+async def test_calendar_and_reminders(client, auth_headers, partner_headers):
+    cal = (await client.get(f"{BASE}/calendar", headers=auth_headers)).json()
+    today = cal["today"]
+    me = next(u for u in cal["users"] if u["username"] == "sagnik")
+    assert today in me["active_days"] and len(cal["users"]) == 2
+
+    shared = (await client.post(f"{BASE}/calendar/reminders", json={"title": "Mock interview", "date": today, "space": "common"}, headers=auth_headers)).json()
+    mine = (await client.post(f"{BASE}/calendar/reminders", json={"title": "Private", "date": today}, headers=auth_headers)).json()
+    seen = [r["id"] for r in (await client.get(f"{BASE}/calendar", params={"month": today[:7]}, headers=partner_headers)).json()["reminders"]]
+    assert shared["id"] in seen and mine["id"] not in seen
+    done = await client.patch(f"{BASE}/calendar/reminders/{shared['id']}", json={"done": True}, headers=partner_headers)
+    assert done.json()["done"] is True and done.json()["title"] == "Mock interview"
+    assert (await client.patch(f"{BASE}/calendar/reminders/{mine['id']}", json={"done": True}, headers=partner_headers)).status_code == 404
+    assert (await client.delete(f"{BASE}/calendar/reminders/{shared['id']}", headers=auth_headers)).status_code == 204
+    assert (await client.get(f"{BASE}/calendar", params={"month": "nope"}, headers=auth_headers)).status_code == 400

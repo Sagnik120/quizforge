@@ -1,159 +1,115 @@
 "use client";
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
+import { Plus, Trash2, CornerDownRight } from "lucide-react";
 import { subjectsApi } from "@/lib/api";
 import { AppLayout } from "@/components/layout/AppLayout";
-import { toast } from "sonner";
-import { Plus, Trash2, ChevronRight, ChevronDown, Edit2, FolderOpen } from "lucide-react";
-import { Subject, Topic } from "@/types";
-import { clsx } from "clsx";
+import { Loader, SpaceTabs, useSpace } from "@/components/ui";
+import type { Subject, Topic } from "@/types";
+
+const COLORS = ["#6366f1", "#ec4899", "#f59e0b", "#22c55e", "#06b6d4", "#ef4444"];
+
+// A one-line "type and press Enter" input used for subjects, topics and sub-topics
+function QuickAdd({ placeholder, onAdd, small }: { placeholder: string; onAdd: (name: string) => void; small?: boolean }) {
+  const [value, setValue] = useState("");
+  const submit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!value.trim()) return;
+    onAdd(value.trim());
+    setValue("");
+  };
+  return (
+    <form onSubmit={submit} className="flex gap-2">
+      <input className={small ? "input !py-1 !text-xs" : "input"} value={value} onChange={(e) => setValue(e.target.value)} placeholder={placeholder} />
+      <button className={small ? "btn-secondary !px-2 !py-1" : "btn-primary"} aria-label="Add"><Plus size={small ? 13 : 16} /></button>
+    </form>
+  );
+}
 
 export default function SubjectsPage() {
   const qc = useQueryClient();
-  const [expanded, setExpanded] = useState<string | null>(null);
-  const [showSubjectForm, setShowSubjectForm] = useState(false);
-  const [showTopicFormFor, setShowTopicFormFor] = useState<string | null>(null);
-  const [subjectName, setSubjectName] = useState("");
-  const [subjectColor, setSubjectColor] = useState("#6366f1");
-  const [topicName, setTopicName] = useState("");
+  const { space } = useSpace();
+  const [color, setColor] = useState(COLORS[0]);
 
-  const { data: subjects = [] } = useQuery<Subject[]>({
+  const { data: subjects = [], isLoading } = useQuery<Subject[]>({
     queryKey: ["subjects"],
-    queryFn: () => subjectsApi.list().then(r => r.data),
+    queryFn: () => subjectsApi.list().then((r) => r.data),
   });
 
-  const createSubject = useMutation({
-    mutationFn: () => subjectsApi.create({ name: subjectName, color: subjectColor }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["subjects"] }); setSubjectName(""); setShowSubjectForm(false); toast.success("Subject created"); },
-    onError: () => toast.error("Failed to create subject"),
+  const run = useMutation({
+    mutationFn: (action: () => Promise<any>) => action(),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["subjects"] });
+      qc.invalidateQueries({ queryKey: ["tests"] });
+    },
+    onError: (e: any) => toast.error(e.response?.data?.detail || "Something went wrong"),
   });
 
-  const deleteSubject = useMutation({
-    mutationFn: (id: string) => subjectsApi.delete(id),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["subjects"] }); toast.success("Subject deleted"); },
-  });
+  const shown = subjects.filter((s) => s.space === space);
 
-  const createTopic = useMutation({
-    mutationFn: ({ subjectId }: { subjectId: string }) =>
-      subjectsApi.createTopic(subjectId, { name: topicName }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["subjects"] }); setTopicName(""); setShowTopicFormFor(null); toast.success("Topic created"); },
-    onError: () => toast.error("Failed to create topic"),
-  });
-
-  const deleteTopic = useMutation({
-    mutationFn: ({ subjectId, topicId }: { subjectId: string; topicId: string }) =>
-      subjectsApi.deleteTopic(subjectId, topicId),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["subjects"] }); toast.success("Topic deleted"); },
-  });
+  const DeleteButton = ({ label, action }: { label: string; action: () => Promise<any> }) => (
+    <button aria-label={`Delete ${label}`} className="p-1 text-gray-300 hover:text-red-500 transition-colors"
+      onClick={() => { if (confirm(`Delete "${label}" with everything inside it (tests and attempts too)?`)) run.mutate(action); }}>
+      <Trash2 size={14} />
+    </button>
+  );
 
   return (
     <AppLayout>
-      <div className="max-w-3xl mx-auto">
-        <div className="flex items-center justify-between mb-8">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">Subjects & Topics</h1>
-            <p className="text-gray-500 mt-1">Organise your study material</p>
+      <div className="max-w-4xl mx-auto space-y-5">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Subjects & Topics</h1>
+          <p className="text-gray-500 mt-1">Subject › Topic › Sub-topic. Tests attach to a topic or a sub-topic.</p>
+        </div>
+        <SpaceTabs />
+
+        <div className="card space-y-3">
+          <QuickAdd placeholder={`New ${space} subject, e.g. DSA, DBMS, Aptitude`}
+            onAdd={(name) => run.mutate(() => subjectsApi.create({ name, color, space }))} />
+          <div className="flex gap-2">
+            {COLORS.map((c) => (
+              <button key={c} aria-label={`Colour ${c}`} onClick={() => setColor(c)}
+                className="w-5 h-5 rounded-full transition-transform hover:scale-125"
+                style={{ background: c, outline: color === c ? `2px solid ${c}` : "none", outlineOffset: 2 }} />
+            ))}
           </div>
-          <button onClick={() => setShowSubjectForm(true)} className="btn-primary flex items-center gap-2">
-            <Plus size={16} /> Add Subject
-          </button>
         </div>
 
-        {/* New subject form */}
-        {showSubjectForm && (
-          <div className="card mb-4 border-primary-200">
-            <h3 className="font-semibold text-gray-800 mb-4">New Subject</h3>
-            <div className="flex gap-3">
-              <input
-                className="input flex-1"
-                placeholder="Subject name (e.g. Physics, Mathematics)"
-                value={subjectName}
-                onChange={e => setSubjectName(e.target.value)}
-                onKeyDown={e => e.key === "Enter" && subjectName && createSubject.mutate()}
-              />
-              <input type="color" value={subjectColor} onChange={e => setSubjectColor(e.target.value)}
-                className="w-12 h-10 rounded-lg border border-gray-200 cursor-pointer p-1" />
-            </div>
-            <div className="flex gap-2 mt-3">
-              <button className="btn-primary" onClick={() => subjectName && createSubject.mutate()} disabled={!subjectName || createSubject.isPending}>
-                {createSubject.isPending ? "Creating..." : "Create"}
-              </button>
-              <button className="btn-secondary" onClick={() => { setShowSubjectForm(false); setSubjectName(""); }}>Cancel</button>
-            </div>
-          </div>
-        )}
-
-        {/* Subjects list */}
-        {subjects.length === 0 ? (
-          <div className="card text-center py-12">
-            <FolderOpen className="mx-auto mb-3 text-gray-300" size={48} />
-            <p className="text-gray-500">No subjects yet. Create your first one above.</p>
-          </div>
+        {isLoading ? <Loader label="Loading subjects" /> : shown.length === 0 ? (
+          <div className="card text-center text-gray-400 py-10">No {space} subjects yet.</div>
         ) : (
-          <div className="space-y-3">
-            {subjects.map((subject) => (
-              <div key={subject.id} className="card p-0 overflow-hidden">
-                {/* Subject header */}
-                <div
-                  className="flex items-center gap-3 p-4 cursor-pointer hover:bg-gray-50 transition-colors"
-                  onClick={() => setExpanded(expanded === subject.id ? null : subject.id)}
-                >
-                  <div className="w-4 h-4 rounded-full shrink-0" style={{ backgroundColor: subject.color }} />
-                  <span className="font-semibold text-gray-800 flex-1">{subject.name}</span>
-                  <span className="text-xs text-gray-400">{subject.topics.length} topics</span>
-                  <button
-                    onClick={e => { e.stopPropagation(); if (confirm("Delete subject and all its topics?")) deleteSubject.mutate(subject.id); }}
-                    className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
-                  >
-                    <Trash2 size={14} />
-                  </button>
-                  {expanded === subject.id ? <ChevronDown size={16} className="text-gray-400" /> : <ChevronRight size={16} className="text-gray-400" />}
-                </div>
-
-                {/* Topics */}
-                {expanded === subject.id && (
-                  <div className="border-t border-gray-100 px-4 py-3 space-y-2 bg-gray-50">
-                    {subject.topics.map((topic: Topic) => (
-                      <div key={topic.id} className="flex items-center gap-2 py-1.5 px-3 bg-white rounded-lg border border-gray-100">
-                        <span className="text-sm text-gray-700 flex-1">{topic.name}</span>
-                        <button
-                          onClick={() => { if (confirm("Delete this topic?")) deleteTopic.mutate({ subjectId: subject.id, topicId: topic.id }); }}
-                          className="p-1 text-gray-400 hover:text-red-500 rounded transition-colors"
-                        >
-                          <Trash2 size={12} />
-                        </button>
-                      </div>
-                    ))}
-
-                    {showTopicFormFor === subject.id ? (
-                      <div className="flex gap-2 pt-1">
-                        <input
-                          className="input text-sm flex-1"
-                          placeholder="Topic name"
-                          value={topicName}
-                          onChange={e => setTopicName(e.target.value)}
-                          onKeyDown={e => e.key === "Enter" && topicName && createTopic.mutate({ subjectId: subject.id })}
-                          autoFocus
-                        />
-                        <button className="btn-primary text-sm px-3" onClick={() => topicName && createTopic.mutate({ subjectId: subject.id })}>
-                          Add
-                        </button>
-                        <button className="btn-secondary text-sm px-3" onClick={() => { setShowTopicFormFor(null); setTopicName(""); }}>
-                          Cancel
-                        </button>
-                      </div>
-                    ) : (
-                      <button
-                        onClick={() => setShowTopicFormFor(subject.id)}
-                        className="flex items-center gap-1.5 text-sm text-primary-600 hover:text-primary-700 py-1 px-3 hover:bg-primary-50 rounded-lg transition-colors"
-                      >
-                        <Plus size={14} /> Add Topic
-                      </button>
-                    )}
+          <div className="grid md:grid-cols-2 gap-4 stagger">
+            {shown.map((s) => {
+              const roots = s.topics.filter((t) => !t.parent_id);
+              const kids = (t: Topic) => s.topics.filter((k) => k.parent_id === t.id);
+              return (
+                <div key={s.id} className="card lift space-y-3" style={{ borderTop: `3px solid ${s.color}` }}>
+                  <div className="flex items-center justify-between">
+                    <h3 className="font-semibold text-gray-900">{s.name}</h3>
+                    <DeleteButton label={s.name} action={() => subjectsApi.delete(s.id)} />
                   </div>
-                )}
-              </div>
-            ))}
+                  {roots.map((t) => (
+                    <div key={t.id} className="rounded-lg bg-gray-50 p-3 space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-medium text-gray-800">{t.name}</span>
+                        <DeleteButton label={t.name} action={() => subjectsApi.deleteTopic(s.id, t.id)} />
+                      </div>
+                      {kids(t).map((k) => (
+                        <div key={k.id} className="flex items-center justify-between pl-2 text-sm text-gray-600">
+                          <span className="flex items-center gap-1.5"><CornerDownRight size={12} className="text-gray-300" />{k.name}</span>
+                          <DeleteButton label={k.name} action={() => subjectsApi.deleteTopic(s.id, k.id)} />
+                        </div>
+                      ))}
+                      <QuickAdd small placeholder="Add sub-topic"
+                        onAdd={(name) => run.mutate(() => subjectsApi.createTopic(s.id, { name, parent_id: t.id }))} />
+                    </div>
+                  ))}
+                  <QuickAdd small placeholder="Add topic"
+                    onAdd={(name) => run.mutate(() => subjectsApi.createTopic(s.id, { name }))} />
+                </div>
+              );
+            })}
           </div>
         )}
       </div>

@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import Optional, List
+from typing import Optional, List, Literal
 from datetime import datetime
 
 
@@ -9,12 +9,13 @@ class TopicBase(BaseModel):
 
 
 class TopicCreate(TopicBase):
-    pass
+    parent_id: Optional[str] = None
 
 
 class TopicResponse(TopicBase):
     id: str
     subject_id: str
+    parent_id: Optional[str] = None
     created_at: datetime
 
     class Config:
@@ -25,6 +26,7 @@ class SubjectBase(BaseModel):
     name: str
     description: Optional[str] = None
     color: Optional[str] = "#6366f1"
+    space: Literal["private", "common"] = "private"
 
 
 class SubjectCreate(SubjectBase):

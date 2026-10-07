@@ -1,9 +1,12 @@
+export type Space = "private" | "common";
+
 export interface Subject {
   id: string;
   name: string;
   description?: string;
   color: string;
   owner_id: string;
+  space: Space;
   created_at: string;
   topics: Topic[];
 }
@@ -13,6 +16,7 @@ export interface Topic {
   name: string;
   description?: string;
   subject_id: string;
+  parent_id?: string | null;
   created_at: string;
 }
 

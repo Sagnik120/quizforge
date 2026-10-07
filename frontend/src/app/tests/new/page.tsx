@@ -29,6 +29,39 @@ const defaultQuestion = (): QuestionForm => ({
   ],
 });
 
+const EXAMPLE_JSON = `{
+  "name": "My Test Name",
+  "description": "Optional description",
+  "time_limit_minutes": 30,
+  "questions": [
+    {
+      "question_type": "MCQ",
+      "text": "Your question here?",
+      "options": [
+        { "id": "a", "text": "Option A", "is_correct": false },
+        { "id": "b", "text": "Option B", "is_correct": true },
+        { "id": "c", "text": "Option C", "is_correct": false },
+        { "id": "d", "text": "Option D", "is_correct": false }
+      ],
+      "explanation": "Why B is correct (optional)",
+      "marks": 2,
+      "negative_marks": 0
+    },
+    {
+      "question_type": "MSQ",
+      "text": "Select ALL correct options",
+      "options": [
+        { "id": "a", "text": "Correct one", "is_correct": true },
+        { "id": "b", "text": "Wrong one",   "is_correct": false },
+        { "id": "c", "text": "Correct two", "is_correct": true },
+        { "id": "d", "text": "Wrong two",   "is_correct": false }
+      ],
+      "marks": 3,
+      "negative_marks": 1
+    }
+  ]
+}`;
+
 // ─── Shared topic selector ────────────────────────────────
 function TopicSelector({
   subjects, subjectId, topicId, onSubjectChange, onTopicChange,
@@ -46,14 +79,19 @@ function TopicSelector({
         <label className="label">Subject *</label>
         <select className="input" value={subjectId} onChange={e => { onSubjectChange(e.target.value); onTopicChange(""); }}>
           <option value="">Select subject</option>
-          {subjects.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+          {subjects.map(s => <option key={s.id} value={s.id}>{s.name} ({s.space})</option>)}
         </select>
       </div>
       <div>
-        <label className="label">Topic *</label>
+        <label className="label">Topic / sub-topic *</label>
         <select className="input" value={topicId} onChange={e => onTopicChange(e.target.value)} disabled={!subjectId}>
           <option value="">Select topic</option>
-          {selectedSubject?.topics.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+          {selectedSubject?.topics.filter(t => !t.parent_id).flatMap(t => [
+            <option key={t.id} value={t.id}>{t.name}</option>,
+            ...selectedSubject.topics.filter(k => k.parent_id === t.id).map(k => (
+              <option key={k.id} value={k.id}>&nbsp;&nbsp;↳ {k.name}</option>
+            )),
+          ])}
         </select>
         {subjectId && selectedSubject?.topics.length === 0 && (
           <p className="text-xs text-orange-500 mt-1">No topics yet — add one in Subjects page first.</p>
@@ -72,9 +110,24 @@ function JSONImportTab({ subjects }: { subjects: Subject[] }) {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<any>(null);
   const [parseError, setParseError] = useState("");
+  const [pasted, setPasted] = useState("");
+
+  const handlePaste = (text: string) => {
+    setPasted(text);
+    setSelectedFile(null);
+    setParseError("");
+    setPreview(null);
+    if (!text.trim()) return;
+    try {
+      setPreview(JSON.parse(text));
+    } catch {
+      setParseError("That is not valid JSON yet — check for a missing comma, quote or bracket.");
+    }
+  };
 
   const handleFileSelect = (file: File) => {
     setSelectedFile(file);
+    setPasted("");
     setParseError("");
     setPreview(null);
     const reader = new FileReader();
@@ -90,19 +143,18 @@ function JSONImportTab({ subjects }: { subjects: Subject[] }) {
 
   const importMutation = useMutation({
     mutationFn: async () => {
-      if (!selectedFile || !topicId) return;
-      const text = await selectedFile.text();
-      const data = JSON.parse(text);
-      const finalData = { ...data, topic_id: topicId };
-      const blob = new Blob([JSON.stringify(finalData)], { type: "application/json" });
-      const modifiedFile = new File([blob], selectedFile.name, { type: "application/json" });
-      return testsApi.importJSON(modifiedFile);
+      const text = selectedFile ? await selectedFile.text() : pasted;
+      return testsApi.create({ ...JSON.parse(text), topic_id: topicId });
     },
     onSuccess: () => { toast.success("Test imported successfully!"); router.push("/tests"); },
-    onError: (e: any) => toast.error(e.response?.data?.detail || "Import failed — check your JSON format"),
+    onError: (e: any) => {
+      const detail = e.response?.data?.detail;
+      // Validation errors arrive as a list of {loc, msg}; show the first one readably
+      toast.error(Array.isArray(detail) ? `${detail[0].loc.slice(1).join(" › ")}: ${detail[0].msg}` : detail || "Import failed — check your JSON format");
+    },
   });
 
-  const canImport = topicId && selectedFile && preview && !parseError;
+  const canImport = topicId && preview && !parseError;
 
   return (
     <div className="space-y-4">
@@ -119,7 +171,7 @@ function JSONImportTab({ subjects }: { subjects: Subject[] }) {
       <div className={clsx("card transition-all", !topicId && "opacity-50 pointer-events-none")}>
         <div className="flex items-center gap-2 mb-4">
           <span className="w-6 h-6 rounded-full bg-primary-500 text-white text-xs flex items-center justify-center font-bold">2</span>
-          <h3 className="font-semibold text-gray-800">Upload your JSON file</h3>
+          <h3 className="font-semibold text-gray-800">Upload a JSON file or paste JSON</h3>
         </div>
         <div
           onClick={() => fileRef.current?.click()}
@@ -148,6 +200,12 @@ function JSONImportTab({ subjects }: { subjects: Subject[] }) {
           )}
         </div>
         <input ref={fileRef} type="file" accept=".json" className="hidden" onChange={e => { if (e.target.files?.[0]) handleFileSelect(e.target.files[0]); }} />
+        <div className="flex items-center justify-between mt-4 mb-1">
+          <label className="label !mb-0" htmlFor="json-paste">…or paste JSON here</label>
+          <button type="button" className="text-xs text-primary-600 hover:underline" onClick={() => handlePaste(EXAMPLE_JSON)}>Fill with example</button>
+        </div>
+        <textarea id="json-paste" className="input font-mono !text-xs resize-y" rows={8} spellCheck={false}
+          value={pasted} onChange={e => handlePaste(e.target.value)} placeholder='{ "name": "My test", "questions": [ ... ] }' />
         {parseError && <p className="text-red-500 text-sm mt-2">{parseError}</p>}
       </div>
 
@@ -183,38 +241,7 @@ function JSONImportTab({ subjects }: { subjects: Subject[] }) {
       <details className="card cursor-pointer">
         <summary className="font-medium text-gray-700 text-sm select-none">View expected JSON format</summary>
         <pre className="mt-3 text-xs bg-gray-50 rounded-lg p-4 overflow-auto text-gray-600 leading-relaxed">
-{`{
-  "name": "My Test Name",
-  "description": "Optional description",
-  "time_limit_minutes": 30,
-  "questions": [
-    {
-      "question_type": "MCQ",
-      "text": "Your question here?",
-      "options": [
-        { "id": "a", "text": "Option A", "is_correct": false },
-        { "id": "b", "text": "Option B", "is_correct": true },
-        { "id": "c", "text": "Option C", "is_correct": false },
-        { "id": "d", "text": "Option D", "is_correct": false }
-      ],
-      "explanation": "Why B is correct (optional)",
-      "marks": 2,
-      "negative_marks": 0
-    },
-    {
-      "question_type": "MSQ",
-      "text": "Select ALL correct options",
-      "options": [
-        { "id": "a", "text": "Correct one", "is_correct": true },
-        { "id": "b", "text": "Wrong one",   "is_correct": false },
-        { "id": "c", "text": "Correct two", "is_correct": true },
-        { "id": "d", "text": "Wrong two",   "is_correct": false }
-      ],
-      "marks": 3,
-      "negative_marks": 1
-    }
-  ]
-}`}
+{EXAMPLE_JSON}
         </pre>
         <p className="text-xs text-green-600 mt-2">✓ No need to include <code>topic_id</code> — you select it from the dropdown above.</p>
       </details>
@@ -424,7 +451,7 @@ export default function NewTestPage() {
       <div className="max-w-3xl mx-auto">
         <div className="mb-6">
           <h1 className="text-2xl font-bold text-gray-900">Create New Test</h1>
-          <p className="text-gray-500 mt-1">Add questions manually or import from a JSON file</p>
+          <p className="text-gray-500 mt-1">Fill the form, paste JSON, or upload a JSON file. Pick a common subject to share the test.</p>
         </div>
 
         <div className="flex gap-1 mb-6 bg-gray-100 p-1 rounded-xl w-fit">

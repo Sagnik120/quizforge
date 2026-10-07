@@ -4,7 +4,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 from typing import List
 from app.db.base import get_db
-from app.api.deps import get_current_user
+from app.api.deps import get_current_user, can_access
 from app.models.user import User
 from app.models.subject import Subject, Topic
 from app.schemas.subject import SubjectCreate, SubjectResponse, TopicCreate, TopicResponse
@@ -19,7 +19,7 @@ async def list_subjects(
 ):
     result = await db.execute(
         select(Subject)
-        .where(Subject.owner_id == current_user.id)
+        .where(can_access(current_user))
         .options(selectinload(Subject.topics))
     )
     return result.scalars().all()
@@ -56,7 +56,7 @@ async def update_subject(
 ):
     result = await db.execute(
         select(Subject)
-        .where(Subject.id == subject_id, Subject.owner_id == current_user.id)
+        .where(Subject.id == subject_id, can_access(current_user))
         .options(selectinload(Subject.topics))
     )
     subject = result.scalar_one_or_none()
@@ -78,7 +78,7 @@ async def delete_subject(
     current_user: User = Depends(get_current_user),
 ):
     result = await db.execute(
-        select(Subject).where(Subject.id == subject_id, Subject.owner_id == current_user.id)
+        select(Subject).where(Subject.id == subject_id, can_access(current_user))
     )
     subject = result.scalar_one_or_none()
     if not subject:
@@ -97,10 +97,17 @@ async def create_topic(
     current_user: User = Depends(get_current_user),
 ):
     result = await db.execute(
-        select(Subject).where(Subject.id == subject_id, Subject.owner_id == current_user.id)
+        select(Subject).where(Subject.id == subject_id, can_access(current_user))
     )
     if not result.scalar_one_or_none():
         raise HTTPException(status_code=404, detail="Subject not found")
+    if payload.parent_id:
+        parent = await db.execute(
+            select(Topic).where(Topic.id == payload.parent_id, Topic.subject_id == subject_id)
+        )
+        parent = parent.scalar_one_or_none()
+        if not parent or parent.parent_id:
+            raise HTTPException(status_code=400, detail="Sub-topics can only be added under a top-level topic")
     topic = Topic(**payload.model_dump(), subject_id=subject_id)
     db.add(topic)
     await db.commit()
@@ -120,13 +127,13 @@ async def update_topic(
         select(Topic).join(Subject).where(
             Topic.id == topic_id,
             Topic.subject_id == subject_id,
-            Subject.owner_id == current_user.id
+            can_access(current_user)
         )
     )
     topic = result.scalar_one_or_none()
     if not topic:
         raise HTTPException(status_code=404, detail="Topic not found")
-    for k, v in payload.model_dump().items():
+    for k, v in payload.model_dump(exclude={"parent_id"}).items():
         setattr(topic, k, v)
     await db.commit()
     await db.refresh(topic)
@@ -143,7 +150,7 @@ async def delete_topic(
     result = await db.execute(
         select(Topic).join(Subject).where(
             Topic.id == topic_id,
-            Subject.owner_id == current_user.id
+            can_access(current_user)
         )
     )
     topic = result.scalar_one_or_none()

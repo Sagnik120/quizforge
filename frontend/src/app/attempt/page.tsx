@@ -1,6 +1,7 @@
 "use client";
-import { useState, useEffect, useRef } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useState, useEffect, useRef, Suspense } from "react";
+import { Loader } from "@/components/ui";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { testsApi, attemptsApi, subjectsApi } from "@/lib/api";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { useSearchParams, useRouter } from "next/navigation";
@@ -283,7 +284,8 @@ function ResultScreen({ result, onRetry }: { result: AttemptResult; onRetry: () 
 }
 
 // ─── Main page ───────────────────────────────────────────
-export default function AttemptPage() {
+function AttemptFlow() {
+  const qc = useQueryClient();
   const searchParams = useSearchParams();
   const [testId, setTestId] = useState<string | null>(searchParams.get("test_id"));
   const [result, setResult] = useState<AttemptResult | null>(null);
@@ -295,9 +297,23 @@ export default function AttemptPage() {
     <AppLayout>
       {!testId && <TestSelector onSelect={setTestId} />}
       {testId && !result && (
-        <TestAttempt key={`${testId}-${key}`} testId={testId} onDone={setResult} />
+        <TestAttempt
+          key={`${testId}-${key}`}
+          testId={testId}
+          // a finished attempt changes scores, streaks and weak areas everywhere
+          onDone={(r) => { setResult(r); qc.invalidateQueries(); }}
+        />
       )}
       {result && <ResultScreen result={result} onRetry={handleRetry} />}
     </AppLayout>
+  );
+}
+
+// useSearchParams needs a Suspense boundary for the production build
+export default function AttemptPage() {
+  return (
+    <Suspense fallback={<Loader label="Loading test" />}>
+      <AttemptFlow />
+    </Suspense>
   );
 }

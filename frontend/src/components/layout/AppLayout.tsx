@@ -1,12 +1,13 @@
 "use client";
 import { useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { useAuthStore } from "@/lib/store";
 import { Sidebar } from "./Sidebar";
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
   const { token } = useAuthStore();
   const router = useRouter();
+  const pathname = usePathname();
 
   useEffect(() => {
     if (!token) router.push("/auth/login");
@@ -17,7 +18,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex min-h-screen">
       <Sidebar />
-      <main className="flex-1 p-8 overflow-auto">{children}</main>
+      <main key={pathname} className="flex-1 p-8 overflow-auto animate-in">{children}</main>
     </div>
   );
 }

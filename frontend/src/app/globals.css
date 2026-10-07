@@ -31,3 +31,36 @@ body {
     @apply block text-sm font-medium text-gray-700 mb-1;
   }
 }
+
+/* ─── Motion ─────────────────────────────────────────────── */
+@keyframes fade-up { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@keyframes pop { 0% { transform: scale(.6); } 60% { transform: scale(1.18); } 100% { transform: scale(1); } }
+@keyframes grow { from { transform: scaleX(0); } }
+@keyframes dot { 0%, 80%, 100% { transform: translateY(0); opacity: .35; } 40% { transform: translateY(-7px); opacity: 1; } }
+@keyframes shimmer { to { background-position: -200% 0; } }
+@keyframes flicker { 0%, 100% { transform: scale(1) rotate(-2deg); } 50% { transform: scale(1.12) rotate(3deg); } }
+
+.animate-in { animation: fade-up .35s ease-out both; }
+.stagger > * { animation: fade-up .4s ease-out both; }
+.stagger > *:nth-child(2) { animation-delay: .05s; }
+.stagger > *:nth-child(3) { animation-delay: .1s; }
+.stagger > *:nth-child(4) { animation-delay: .15s; }
+.stagger > *:nth-child(5) { animation-delay: .2s; }
+.stagger > *:nth-child(n+6) { animation-delay: .25s; }
+.pop { animation: pop .28s ease-out; }
+.bar-fill { transform-origin: left; animation: grow .8s cubic-bezier(.2, .8, .2, 1) both; transition: width .5s ease; }
+.flame { display: inline-flex; animation: flicker 1.6s ease-in-out infinite; transform-origin: bottom center; }
+.lift { transition: transform .18s ease, box-shadow .18s ease; }
+.lift:hover { transform: translateY(-2px); box-shadow: 0 8px 24px -12px rgb(79 70 229 / .35); }
+.btn-primary, .btn-secondary { transition: transform .1s ease, background-color .15s ease; }
+.btn-primary:active, .btn-secondary:active { transform: scale(.96); }
+
+.loader-dots { display: inline-flex; gap: 6px; }
+.loader-dots span { width: 9px; height: 9px; border-radius: 9999px; background: var(--primary); animation: dot 1s ease-in-out infinite; }
+.loader-dots span:nth-child(2) { animation-delay: .15s; }
+.loader-dots span:nth-child(3) { animation-delay: .3s; }
+.skeleton { border-radius: .75rem; background: linear-gradient(90deg, #eef2f7 25%, #f8fafc 50%, #eef2f7 75%); background-size: 200% 100%; animation: shimmer 1.3s linear infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}

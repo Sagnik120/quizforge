@@ -5,11 +5,11 @@ from sqlalchemy.orm import selectinload
 from typing import List, Optional
 import json
 from app.db.base import get_db
-from app.api.deps import get_current_user
+from app.api.deps import get_current_user, can_access
 from app.models.user import User
 from app.models.test import Test, Question
 from app.models.subject import Subject, Topic
-from app.models.attempt import Attempt
+from app.models.attempt import Attempt, AttemptStatus
 from app.schemas.test import (
     TestCreate, TestResponse, TestSummary, TestImportJSON,
     QuestionCreate, QuestionResponse, QuestionPublic
@@ -17,67 +17,92 @@ from app.schemas.test import (
 
 router = APIRouter(prefix="/tests", tags=["Tests"])
 
+# Best score below this (percent) flags a test as "attempt again"
+RETRY_BELOW = 60
 
-@router.get("/", response_model=List[TestSummary])
+
+def _pct(values):
+    return round(max(values), 1) if values else None
+
+
+@router.get("/", response_model=List[dict])
 async def list_tests(
     topic_id: Optional[str] = None,
     subject_id: Optional[str] = None,
+    space: Optional[str] = None,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """List all tests, optionally filtered by topic or subject."""
+    """List tests you can see (your private ones + the common space) with attempt stats."""
     query = (
         select(Test)
         .join(Topic)
         .join(Subject)
-        .where(Test.creator_id == current_user.id)
+        .where(can_access(current_user))
+        .options(
+            selectinload(Test.questions),
+            selectinload(Test.topic).selectinload(Topic.subject),
+            selectinload(Test.creator),
+        )
+        .order_by(Test.created_at.desc())
     )
     if topic_id:
         query = query.where(Test.topic_id == topic_id)
     if subject_id:
         query = query.where(Topic.subject_id == subject_id)
+    if space:
+        query = query.where(Subject.space == space)
+    tests = (await db.execute(query)).scalars().all()
 
-    result = await db.execute(query)
-    tests = result.scalars().all()
+    # All completed attempts on these tests, oldest first, grouped per (test, user)
+    stats = {}
+    if tests:
+        rows = await db.execute(
+            select(Attempt.test_id, Attempt.user_id, Attempt.percentage)
+            .where(
+                Attempt.test_id.in_([t.id for t in tests]),
+                Attempt.status == AttemptStatus.COMPLETED,
+            )
+            .order_by(Attempt.completed_at)
+        )
+        for test_id, user_id, pct in rows.all():
+            stats.setdefault(test_id, {}).setdefault(user_id, []).append(pct or 0)
 
     summaries = []
     for test in tests:
-        qs = await db.execute(select(Question).where(Question.test_id == test.id))
-        questions = qs.scalars().all()
-        at = await db.execute(
-            select(func.count(Attempt.id)).where(
-                Attempt.test_id == test.id, Attempt.user_id == current_user.id
-            )
-        )
-        attempt_count = at.scalar() or 0
-        summaries.append(
-            TestSummary(
-                id=test.id,
-                name=test.name,
-                description=test.description,
-                topic_id=test.topic_id,
-                total_questions=len(questions),
-                total_marks=sum(q.marks for q in questions),
-                time_limit_minutes=test.time_limit_minutes,
-                attempt_count=attempt_count,
-                created_at=test.created_at,
-            )
-        )
+        per_user = stats.get(test.id, {})
+        mine = per_user.get(current_user.id, [])
+        others = [p for uid, ps in per_user.items() if uid != current_user.id for p in ps]
+        best = _pct(mine)
+        summaries.append({
+            "id": test.id,
+            "name": test.name,
+            "description": test.description,
+            "topic_id": test.topic_id,
+            "topic_name": test.topic.name,
+            "subject_id": test.topic.subject_id,
+            "subject_name": test.topic.subject.name,
+            "space": test.topic.subject.space,
+            "creator_id": test.creator_id,
+            "creator_name": test.creator.full_name or test.creator.username,
+            "total_questions": len(test.questions),
+            "total_marks": sum(q.marks for q in test.questions),
+            "time_limit_minutes": test.time_limit_minutes,
+            "attempt_count": len(mine),
+            "best_percentage": best,
+            "last_percentage": round(mine[-1], 1) if mine else None,
+            "needs_retry": best is not None and best < RETRY_BELOW,
+            "partner_attempt_count": len(others),
+            "partner_best_percentage": _pct(others),
+            "created_at": test.created_at,
+        })
     return summaries
 
 
-@router.post("/", response_model=TestResponse, status_code=201)
-async def create_test(
-    payload: TestCreate,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    """Create a new test with questions."""
-    # Verify topic belongs to user
+async def _save_test(payload, db: AsyncSession, current_user: User):
     topic_result = await db.execute(
         select(Topic).join(Subject).where(
-            Topic.id == payload.topic_id,
-            Subject.owner_id == current_user.id
+            Topic.id == payload.topic_id, can_access(current_user)
         )
     )
     if not topic_result.scalar_one_or_none():
@@ -96,14 +121,23 @@ async def create_test(
     for i, q_data in enumerate(payload.questions):
         q_dict = q_data.model_dump()
         q_dict["order_index"] = i
-        question = Question(test_id=test.id, **q_dict)
-        db.add(question)
+        db.add(Question(test_id=test.id, **q_dict))
 
     await db.commit()
     result = await db.execute(
         select(Test).where(Test.id == test.id).options(selectinload(Test.questions))
     )
     return result.scalar_one()
+
+
+@router.post("/", response_model=TestResponse, status_code=201)
+async def create_test(
+    payload: TestCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Create a new test with questions (used by the form and by pasted JSON)."""
+    return await _save_test(payload, db, current_user)
 
 
 @router.post("/import-json", response_model=TestResponse, status_code=201)
@@ -115,39 +149,10 @@ async def import_test_from_json(
     """Import a test from a JSON file. See /api/v1/tests/example-json for the format."""
     content = await file.read()
     try:
-        data = json.loads(content)
-        payload = TestImportJSON(**data)
+        payload = TestImportJSON(**json.loads(content))
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Invalid JSON format: {str(e)}")
-
-    topic_result = await db.execute(
-        select(Topic).join(Subject).where(
-            Topic.id == payload.topic_id,
-            Subject.owner_id == current_user.id
-        )
-    )
-    if not topic_result.scalar_one_or_none():
-        raise HTTPException(status_code=404, detail="Topic not found")
-
-    test = Test(
-        name=payload.name,
-        description=payload.description,
-        topic_id=payload.topic_id,
-        creator_id=current_user.id,
-        time_limit_minutes=payload.time_limit_minutes,
-    )
-    db.add(test)
-    await db.flush()
-    for i, q_data in enumerate(payload.questions):
-        q_dict = q_data.model_dump()
-        q_dict["order_index"] = i
-        question = Question(test_id=test.id, **q_dict)
-        db.add(question)
-    await db.commit()
-    result2 = await db.execute(
-        select(Test).where(Test.id == test.id).options(selectinload(Test.questions))
-    )
-    return result2.scalar_one()
+    return await _save_test(payload, db, current_user)
 
 
 @router.get("/example-json")
@@ -196,7 +201,7 @@ async def get_test(
 ):
     """Get a test with all questions (shows correct answers — for review/edit)."""
     result = await db.execute(
-        select(Test).where(Test.id == test_id, Test.creator_id == current_user.id)
+        select(Test).join(Topic).join(Subject).where(Test.id == test_id, can_access(current_user))
         .options(selectinload(Test.questions))
     )
     test = result.scalar_one_or_none()
@@ -212,7 +217,7 @@ async def get_test_for_attempt(
     current_user: User = Depends(get_current_user),
 ):
     """Get test questions without revealing correct answers (for attempt mode)."""
-    result = await db.execute(select(Test).where(Test.id == test_id))
+    result = await db.execute(select(Test).join(Topic).join(Subject).where(Test.id == test_id, can_access(current_user)))
     test = result.scalar_one_or_none()
     if not test:
         raise HTTPException(status_code=404, detail="Test not found")
@@ -244,9 +249,6 @@ async def get_test_for_attempt(
     }
 
 
-# Replace your existing delete_test function in backend/app/api/routes/tests.py
-# with this one:
-
 @router.delete("/{test_id}", status_code=204)
 async def delete_test(
     test_id: str,
@@ -257,7 +259,7 @@ async def delete_test(
     from app.models.attempt import Attempt, AttemptAnswer, RevisionQueue
 
     result = await db.execute(
-        select(Test).where(Test.id == test_id, Test.creator_id == current_user.id)
+        select(Test).join(Topic).join(Subject).where(Test.id == test_id, can_access(current_user))
     )
     test = result.scalar_one_or_none()
     if not test:

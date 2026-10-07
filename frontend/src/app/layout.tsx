@@ -7,8 +7,8 @@ import { Toaster } from "sonner";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "QuizForge — Master Your Exams",
-  description: "Create tests, practice repeatedly, and track your mastery",
+  title: "PrepDuo — Placement prep, together",
+  description: "Tests, goals and a shared calendar for placement preparation",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

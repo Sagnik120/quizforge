@@ -20,8 +20,10 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (res) => res,
   (error) => {
-    if (error.response?.status === 401 && typeof window !== "undefined") {
+    const isAuthCall = error.config?.url?.startsWith("/auth/");
+    if (error.response?.status === 401 && !isAuthCall && typeof window !== "undefined") {
       localStorage.removeItem("quizforge_token");
+      localStorage.removeItem("quizforge-auth");
       window.location.href = "/auth/login";
     }
     return Promise.reject(error);
@@ -30,8 +32,9 @@ api.interceptors.response.use(
 
 // ─── Auth ──────────────────────────────────────────────
 export const authApi = {
-  register: (data: any) => api.post("/auth/register", data),
-  login: (data: any) => api.post("/auth/login", data),
+  people: () => api.get("/auth/users"),
+  quickLogin: (username: string, passcode = "") =>
+    api.post("/auth/quick-login", { username, passcode }),
 };
 
 // ─── Subjects & Topics ─────────────────────────────────
@@ -50,7 +53,7 @@ export const subjectsApi = {
 
 // ─── Tests ─────────────────────────────────────────────
 export const testsApi = {
-  list: (params?: { topic_id?: string; subject_id?: string }) =>
+  list: (params?: { topic_id?: string; subject_id?: string; space?: string }) =>
     api.get("/tests/", { params }),
   create: (data: any) => api.post("/tests/", data),
   importJSON: (file: File) => {
@@ -79,6 +82,7 @@ export const attemptsApi = {
 // ─── Analytics ─────────────────────────────────────────
 export const analyticsApi = {
   summary: () => api.get("/analytics/summary"),
+  weakAreas: () => api.get("/analytics/weak-areas"),
   revisionQueue: (resolved = false) =>
     api.get("/analytics/revision-queue", { params: { resolved } }),
   resolveRevision: (itemId: string) =>
@@ -95,4 +99,25 @@ export const leaderboardApi = {
 export const profileApi = {
   get: () => api.get("/profile/"),
   update: (data: any) => api.put("/profile/", data),
+};
+
+// ─── Goals, calendar, overview ─────────────────────────
+export const goalsApi = {
+  list: () => api.get("/goals"),
+  create: (data: { title: string; parent_id?: string | null; space: string }) =>
+    api.post("/goals", data),
+  rename: (id: string, title: string) => api.put(`/goals/${id}`, { title }),
+  toggle: (id: string) => api.post(`/goals/${id}/toggle`),
+  delete: (id: string) => api.delete(`/goals/${id}`),
+};
+
+export const calendarApi = {
+  month: (month: string) => api.get("/calendar", { params: { month } }),
+  addReminder: (data: any) => api.post("/calendar/reminders", data),
+  updateReminder: (id: string, data: any) => api.patch(`/calendar/reminders/${id}`, data),
+  deleteReminder: (id: string) => api.delete(`/calendar/reminders/${id}`),
+};
+
+export const overviewApi = {
+  get: () => api.get("/overview"),
 };

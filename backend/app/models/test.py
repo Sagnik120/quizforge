@@ -45,5 +45,5 @@ class Question(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
     test = relationship("Test", back_populates="questions")
-    attempt_answers = relationship("AttemptAnswer", back_populates="question")
-    revision_entries = relationship("RevisionQueue", back_populates="question")
+    attempt_answers = relationship("AttemptAnswer", back_populates="question", cascade="all, delete-orphan")
+    revision_entries = relationship("RevisionQueue", back_populates="question", cascade="all, delete-orphan")

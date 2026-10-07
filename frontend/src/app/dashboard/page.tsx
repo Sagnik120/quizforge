@@ -1,91 +1,122 @@
 "use client";
-import { useQuery } from "@tanstack/react-query";
-import { analyticsApi, leaderboardApi } from "@/lib/api";
-import { AppLayout } from "@/components/layout/AppLayout";
-import { useAuthStore } from "@/lib/store";
-import { BookOpen, Target, Clock, Flame, Trophy, TrendingUp } from "lucide-react";
 import Link from "next/link";
+import { useQuery } from "@tanstack/react-query";
+import { format, parseISO } from "date-fns";
+import { Flame, RotateCcw, Sparkles, Bell } from "lucide-react";
+import { overviewApi, testsApi } from "@/lib/api";
+import { useAuthStore } from "@/lib/store";
+import { AppLayout } from "@/components/layout/AppLayout";
+import { Avatar, Loader, ProgressBar, SpaceBadge, personColor, ratio } from "@/components/ui";
+
+function PersonCard({ p }: { p: any }) {
+  const color = personColor(p.username);
+  const bars = [
+    { label: "Common goals", ...p.common_goals },
+    { label: p.is_me ? "My private goals" : "Private goals", ...p.private_goals },
+  ];
+  return (
+    <div className="card lift">
+      <div className="flex items-center gap-3 mb-5">
+        <Avatar name={p.full_name} username={p.username} size={44} />
+        <div className="flex-1 min-w-0">
+          <p className="font-semibold text-gray-900 truncate">{p.full_name}{p.is_me && <span className="text-gray-400 font-normal"> · you</span>}</p>
+          <p className="text-xs text-gray-500">{p.active_today ? "Active today ✓" : "Nothing done yet today"}</p>
+        </div>
+        <div className="flex items-center gap-1 text-orange-600 font-bold text-lg">
+          <span className={p.current_streak > 0 ? "flame" : ""}><Flame size={20} /></span>{p.current_streak}
+        </div>
+      </div>
+      <div className="grid grid-cols-3 gap-2 text-center mb-5">
+        {[[p.attempts, "tests taken"], [`${p.average_percentage}%`, "avg score"], [p.longest_streak, "best streak"]].map(([v, l]) => (
+          <div key={l as string} className="rounded-lg bg-gray-50 py-2">
+            <p className="font-bold text-gray-900">{v}</p>
+            <p className="text-[11px] text-gray-500">{l}</p>
+          </div>
+        ))}
+      </div>
+      {bars.map((b) => (
+        <div key={b.label} className="mb-3 last:mb-0">
+          <div className="flex justify-between text-xs text-gray-500 mb-1">
+            <span>{b.label}</span><span>{b.done}/{b.total}</span>
+          </div>
+          <ProgressBar value={ratio(b.done, b.total)} color={color} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function TestRow({ t, hint }: { t: any; hint: string }) {
+  return (
+    <Link href={`/attempt?test_id=${t.id}`} className="flex items-center gap-3 py-2.5 group">
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-medium text-gray-800 truncate group-hover:text-primary-600 transition-colors">{t.name}</p>
+        <p className="text-xs text-gray-500 truncate">{t.subject_name} › {t.topic_name} · {hint}</p>
+      </div>
+      <SpaceBadge space={t.space} />
+    </Link>
+  );
+}
 
 export default function DashboardPage() {
   const { user } = useAuthStore();
-  const { data: analytics } = useQuery({
-    queryKey: ["analytics"],
-    queryFn: () => analyticsApi.summary().then(r => r.data),
-  });
+  const { data, isLoading } = useQuery({ queryKey: ["overview"], queryFn: () => overviewApi.get().then((r) => r.data) });
+  const { data: tests = [] } = useQuery<any[]>({ queryKey: ["tests"], queryFn: () => testsApi.list().then((r) => r.data) });
 
-  const stats = [
-    { label: "Total Attempts", value: analytics?.total_attempts ?? "—", icon: Target, color: "text-blue-600 bg-blue-50" },
-    { label: "Tests Practiced", value: analytics?.total_tests_attempted ?? "—", icon: BookOpen, color: "text-green-600 bg-green-50" },
-    { label: "Best Score", value: analytics?.best_percentage ? `${analytics.best_percentage}%` : "—", icon: Trophy, color: "text-yellow-600 bg-yellow-50" },
-    { label: "Hours Studied", value: analytics?.total_time_spent_hours ?? "—", icon: Clock, color: "text-purple-600 bg-purple-50" },
-    { label: "Current Streak", value: `${user?.current_streak ?? 0} days`, icon: Flame, color: "text-orange-600 bg-orange-50" },
-    { label: "Avg Score", value: analytics?.average_percentage ? `${analytics.average_percentage}%` : "—", icon: TrendingUp, color: "text-indigo-600 bg-indigo-50" },
-  ];
+  const retry = tests.filter((t) => t.needs_retry);
+  const fresh = tests.filter((t) => t.attempt_count === 0);
 
   return (
     <AppLayout>
-      <div className="max-w-6xl mx-auto">
-        <div className="mb-8">
-          <h1 className="text-2xl font-bold text-gray-900">
-            Welcome back, {user?.full_name || user?.username} 👋
-          </h1>
-          <p className="text-gray-500 mt-1">Here's your performance overview</p>
+      <div className="max-w-5xl mx-auto space-y-6">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Hi {user?.full_name || user?.username} 👋</h1>
+          <p className="text-gray-500 mt-1">{data ? format(parseISO(data.today), "EEEE, d MMMM") : " "}</p>
         </div>
 
-        {/* Stats grid */}
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-8">
-          {stats.map(({ label, value, icon: Icon, color }) => (
-            <div key={label} className="card flex items-center gap-4">
-              <div className={`p-3 rounded-xl ${color}`}>
-                <Icon size={22} />
-              </div>
-              <div>
-                <p className="text-2xl font-bold text-gray-900">{value}</p>
-                <p className="text-sm text-gray-500">{label}</p>
-              </div>
+        {isLoading ? <Loader label="Loading your dashboard" /> : (
+          <>
+            <div className="grid md:grid-cols-2 gap-4 stagger">
+              {data.people.map((p: any) => <PersonCard key={p.id} p={p} />)}
             </div>
-          ))}
-        </div>
 
-        {/* Quick actions */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-          <Link href="/tests/new" className="card hover:border-primary-200 hover:shadow-md transition-all cursor-pointer">
-            <h3 className="font-semibold text-gray-800 mb-1">Create Test</h3>
-            <p className="text-sm text-gray-500">Add questions manually or import JSON</p>
-          </Link>
-          <Link href="/attempt" className="card hover:border-primary-200 hover:shadow-md transition-all cursor-pointer">
-            <h3 className="font-semibold text-gray-800 mb-1">Attempt a Test</h3>
-            <p className="text-sm text-gray-500">Practice and track your score</p>
-          </Link>
-          <Link href="/analytics" className="card hover:border-primary-200 hover:shadow-md transition-all cursor-pointer">
-            <h3 className="font-semibold text-gray-800 mb-1">Review Weak Areas</h3>
-            <p className="text-sm text-gray-500">
-              {analytics?.weak_topics?.length ?? 0} topics need attention
-            </p>
-          </Link>
-        </div>
-
-        {/* Weak topics */}
-        {analytics?.weak_topics?.length > 0 && (
-          <div className="card">
-            <h2 className="text-lg font-semibold text-gray-800 mb-4">Weak Topics</h2>
-            <div className="space-y-3">
-              {analytics.weak_topics.map((t: any) => (
-                <div key={t.topic_name} className="flex items-center gap-4">
-                  <span className="text-sm text-gray-700 w-40 truncate">{t.topic_name}</span>
-                  <div className="flex-1 bg-gray-100 rounded-full h-2">
-                    <div
-                      className="bg-red-400 h-2 rounded-full"
-                      style={{ width: `${t.avg_score}%` }}
-                    />
+            <div className="grid md:grid-cols-3 gap-4 stagger">
+              <div className="card">
+                <h2 className="font-semibold text-gray-800 flex items-center gap-2 mb-2"><RotateCcw size={16} className="text-red-500" /> Attempt again</h2>
+                {retry.length === 0 ? <p className="text-sm text-gray-400">No weak scores. Nice.</p> : (
+                  <div className="divide-y divide-gray-50">
+                    {retry.slice(0, 5).map((t) => <TestRow key={t.id} t={t} hint={`best ${t.best_percentage}%`} />)}
                   </div>
-                  <span className="text-sm font-medium text-red-600 w-12 text-right">
-                    {t.avg_score}%
-                  </span>
-                </div>
-              ))}
+                )}
+              </div>
+              <div className="card">
+                <h2 className="font-semibold text-gray-800 flex items-center gap-2 mb-2"><Sparkles size={16} className="text-primary-500" /> Not attempted yet</h2>
+                {fresh.length === 0 ? <p className="text-sm text-gray-400">You have tried every test.</p> : (
+                  <div className="divide-y divide-gray-50">
+                    {fresh.slice(0, 5).map((t) => <TestRow key={t.id} t={t} hint={t.creator_id === user?.id ? "made by you" : `from ${t.creator_name}`} />)}
+                  </div>
+                )}
+              </div>
+              <div className="card">
+                <h2 className="font-semibold text-gray-800 flex items-center gap-2 mb-2"><Bell size={16} className="text-amber-500" /> Reminders this week</h2>
+                {data.reminders.length === 0 ? <p className="text-sm text-gray-400">Nothing due. <Link href="/calendar" className="text-primary-600 hover:underline">Add one</Link></p> : (
+                  <div className="divide-y divide-gray-50">
+                    {data.reminders.map((r: any) => (
+                      <Link key={r.id} href="/calendar" className="flex items-center gap-3 py-2.5">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-gray-800 truncate">{r.title}</p>
+                          <p className={r.date < data.today ? "text-xs text-red-500" : "text-xs text-gray-500"}>
+                            {r.date === data.today ? "Today" : format(parseISO(r.date), "EEE, d MMM")}{r.date < data.today && " · overdue"}
+                          </p>
+                        </div>
+                        <SpaceBadge space={r.space} />
+                      </Link>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
+          </>
         )}
       </div>
     </AppLayout>

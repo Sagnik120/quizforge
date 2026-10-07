@@ -5,7 +5,9 @@ from sqlalchemy.orm import selectinload
 from typing import List
 from datetime import datetime
 from app.db.base import get_db
-from app.api.deps import get_current_user
+from app.api.deps import get_current_user, can_access
+from app.models.subject import Subject, Topic
+from app.services.activity import activity_days, streaks
 from app.models.user import User
 from app.models.test import Test, Question
 from app.models.attempt import Attempt, AttemptAnswer, AttemptStatus, RevisionQueue
@@ -24,7 +26,9 @@ async def start_attempt(
     current_user: User = Depends(get_current_user),
 ):
     """Start a new attempt for a test. Returns the attempt_id to use when submitting."""
-    result = await db.execute(select(Test).where(Test.id == payload.test_id))
+    result = await db.execute(
+        select(Test).join(Topic).join(Subject).where(Test.id == payload.test_id, can_access(current_user))
+    )
     if not result.scalar_one_or_none():
         raise HTTPException(status_code=404, detail="Test not found")
 
@@ -166,17 +170,9 @@ async def submit_attempt(
 
 
 async def _update_streak(user: User, db: AsyncSession):
-    from datetime import date, timedelta
-    today = date.today()
-    last = user.last_activity_date.date() if user.last_activity_date else None
-    if last == today:
-        return
-    if last == today - timedelta(days=1):
-        user.current_streak += 1
-    else:
-        user.current_streak = 1
-    if user.current_streak > user.longest_streak:
-        user.longest_streak = user.current_streak
+    current, longest = streaks(await activity_days(db, user.id))
+    user.current_streak = current
+    user.longest_streak = max(longest, user.longest_streak or 0)
     user.last_activity_date = datetime.utcnow()
 
 
