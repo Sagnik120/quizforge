@@ -302,6 +302,206 @@ async def test_calendar_and_reminders(client, auth_headers, partner_headers):
     assert shared["id"] in seen and mine["id"] not in seen
     done = await client.patch(f"{BASE}/calendar/reminders/{shared['id']}", json={"done": True}, headers=partner_headers)
     assert done.json()["done"] is True and done.json()["title"] == "Mock interview"
+    # a tick is personal: the partner ticking a common reminder does not tick it for me
+    def state(cal):
+        return next(r["done"] for r in cal.json()["reminders"] if r["id"] == shared["id"])
+    assert state(await client.get(f"{BASE}/calendar", params={"month": today[:7]}, headers=partner_headers)) is True
+    assert state(await client.get(f"{BASE}/calendar", params={"month": today[:7]}, headers=auth_headers)) is False
+    assert shared["id"] in [r["id"] for r in (await client.get(f"{BASE}/overview", headers=auth_headers)).json()["reminders"]]
+    assert shared["id"] not in [r["id"] for r in (await client.get(f"{BASE}/overview", headers=partner_headers)).json()["reminders"]]
     assert (await client.patch(f"{BASE}/calendar/reminders/{mine['id']}", json={"done": True}, headers=partner_headers)).status_code == 404
     assert (await client.delete(f"{BASE}/calendar/reminders/{shared['id']}", headers=auth_headers)).status_code == 204
     assert (await client.get(f"{BASE}/calendar", params={"month": "nope"}, headers=auth_headers)).status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_my_attempts_lists_test_names(client, auth_headers):
+    res = await client.get(f"{BASE}/attempts/my", headers=auth_headers)
+    assert res.status_code == 200
+    assert res.json() and all(a["test_name"] and a["completed_at"] for a in res.json())
+
+
+# ─── Private vs common: one person's actions never change the other's state ───
+
+async def _get(client, path, headers, **params):
+    res = await client.get(f"{BASE}/{path}", headers=headers, params=params)
+    assert res.status_code == 200
+    return res.json()
+
+
+async def _goal(client, headers, title, parent=None, space="common"):
+    res = await client.post(f"{BASE}/goals", json={"title": title, "parent_id": parent, "space": space}, headers=headers)
+    assert res.status_code == 201
+    return res.json()
+
+
+async def _goals_by_id(client, headers):
+    return {g["id"]: g for g in await _get(client, "goals", headers)}
+
+
+async def _me(client, headers):
+    return next(p for p in (await _get(client, "overview", headers))["people"] if p["is_me"])
+
+
+@pytest.mark.asyncio
+async def test_private_goal_is_invisible_and_untouchable_for_partner(client, auth_headers, partner_headers):
+    before = await _me(client, partner_headers)
+    goal = await _goal(client, auth_headers, "Only mine", space="private")
+    assert goal["id"] in await _goals_by_id(client, auth_headers)
+    assert goal["id"] not in await _goals_by_id(client, partner_headers)
+    assert (await client.post(f"{BASE}/goals/{goal['id']}/toggle", headers=partner_headers)).status_code == 404
+    assert (await client.put(f"{BASE}/goals/{goal['id']}", json={"title": "hacked"}, headers=partner_headers)).status_code == 404
+    assert (await client.delete(f"{BASE}/goals/{goal['id']}", headers=partner_headers)).status_code == 404
+    child = await client.post(f"{BASE}/goals", json={"title": "x", "parent_id": goal["id"], "space": "private"}, headers=partner_headers)
+    assert child.status_code == 404
+    # it counts only towards its owner's private total
+    mine_before = (await _me(client, auth_headers))["private_goals"]
+    await client.post(f"{BASE}/goals/{goal['id']}/toggle", headers=auth_headers)
+    mine_after = (await _me(client, auth_headers))["private_goals"]
+    assert mine_after["done"] == mine_before["done"] + 1
+    after = await _me(client, partner_headers)
+    assert after["private_goals"] == before["private_goals"] and after["common_goals"] == before["common_goals"]
+
+
+@pytest.mark.asyncio
+async def test_common_goal_ticks_are_per_person(client, auth_headers, partner_headers):
+    me_id = (await _me(client, auth_headers))["id"]
+    partner_id = (await _me(client, partner_headers))["id"]
+    leaf = await _goal(client, auth_headers, "Shared leaf")
+
+    # nobody has ticked yet, and both can see it
+    for headers in (auth_headers, partner_headers):
+        seen = (await _goals_by_id(client, headers))[leaf["id"]]
+        assert seen["done_by"] == [] and seen["my_done_at"] is None
+
+    # I tick: done for me, still open for my partner
+    assert (await client.post(f"{BASE}/goals/{leaf['id']}/toggle", headers=auth_headers)).json()["done"] is True
+    mine = (await _goals_by_id(client, auth_headers))[leaf["id"]]
+    theirs = (await _goals_by_id(client, partner_headers))[leaf["id"]]
+    assert mine["done_by"] == [me_id] and mine["my_done_at"]
+    assert theirs["done_by"] == [me_id] and theirs["my_done_at"] is None
+
+    # partner ticks too, then I untick: only my tick goes away
+    assert (await client.post(f"{BASE}/goals/{leaf['id']}/toggle", headers=partner_headers)).json()["done"] is True
+    assert sorted((await _goals_by_id(client, auth_headers))[leaf["id"]]["done_by"]) == sorted([me_id, partner_id])
+    assert (await client.post(f"{BASE}/goals/{leaf['id']}/toggle", headers=auth_headers)).json()["done"] is False
+    theirs = (await _goals_by_id(client, partner_headers))[leaf["id"]]
+    assert theirs["done_by"] == [partner_id] and theirs["my_done_at"]
+    assert (await _goals_by_id(client, auth_headers))[leaf["id"]]["my_done_at"] is None
+
+
+@pytest.mark.asyncio
+async def test_ticking_a_common_subject_only_counts_for_the_person_who_ticked(client, auth_headers, partner_headers):
+    me_id = (await _me(client, auth_headers))["id"]
+    root = await _goal(client, partner_headers, "Shared subject")  # created by the partner
+    topic = await _goal(client, auth_headers, "Topic", root["id"])
+    leaves = [await _goal(client, auth_headers, f"Sub {i}", topic["id"]) for i in range(3)]
+    mine_before, theirs_before = (await _me(client, auth_headers))["common_goals"], (await _me(client, partner_headers))["common_goals"]
+    assert mine_before["total"] == theirs_before["total"]
+
+    await client.post(f"{BASE}/goals/{root['id']}/toggle", headers=auth_headers)
+    goals = await _goals_by_id(client, partner_headers)
+    assert all(goals[leaf["id"]]["done_by"] == [me_id] for leaf in leaves)
+    mine_after, theirs_after = (await _me(client, auth_headers))["common_goals"], (await _me(client, partner_headers))["common_goals"]
+    assert mine_after["done"] == mine_before["done"] + 3
+    assert theirs_after == theirs_before
+    # each person's dashboard reports the other's numbers unchanged as well
+    partner_seen_by_me = next(p for p in (await _get(client, "overview", auth_headers))["people"] if not p["is_me"])
+    assert partner_seen_by_me["common_goals"] == theirs_before
+
+
+@pytest.mark.asyncio
+async def test_private_reminder_is_invisible_and_untouchable_for_partner(client, auth_headers, partner_headers):
+    today = (await _get(client, "calendar", auth_headers))["today"]
+    r = (await client.post(f"{BASE}/calendar/reminders", json={"title": "Secret plan", "date": today}, headers=auth_headers)).json()
+    assert r["id"] in [x["id"] for x in (await _get(client, "calendar", auth_headers))["reminders"]]
+    assert r["id"] in [x["id"] for x in (await _get(client, "overview", auth_headers))["reminders"]]
+    assert r["id"] not in [x["id"] for x in (await _get(client, "calendar", partner_headers))["reminders"]]
+    assert r["id"] not in [x["id"] for x in (await _get(client, "overview", partner_headers))["reminders"]]
+    assert (await client.patch(f"{BASE}/calendar/reminders/{r['id']}", json={"done": True}, headers=partner_headers)).status_code == 404
+    assert (await client.delete(f"{BASE}/calendar/reminders/{r['id']}", headers=partner_headers)).status_code == 404
+    assert next(x for x in (await _get(client, "calendar", auth_headers))["reminders"] if x["id"] == r["id"])["done"] is False
+
+
+@pytest.mark.asyncio
+async def test_common_reminder_ticks_are_per_person(client, auth_headers, partner_headers):
+    today = (await _get(client, "calendar", auth_headers))["today"]
+    r = (await client.post(f"{BASE}/calendar/reminders", json={"title": "Mock test", "date": today, "space": "common"}, headers=auth_headers)).json()
+
+    async def done_for(headers):
+        return next(x for x in (await _get(client, "calendar", headers))["reminders"] if x["id"] == r["id"])["done"]
+
+    async def pending_for(headers):
+        return r["id"] in [x["id"] for x in (await _get(client, "overview", headers))["reminders"]]
+
+    async def tick(headers, done):
+        res = await client.patch(f"{BASE}/calendar/reminders/{r['id']}", json={"done": done}, headers=headers)
+        assert res.status_code == 200 and res.json()["done"] is done
+
+    assert not await done_for(auth_headers) and not await done_for(partner_headers)
+    assert await pending_for(auth_headers) and await pending_for(partner_headers)
+
+    await tick(auth_headers, True)  # the creator ticks: still pending for the partner
+    assert await done_for(auth_headers) and not await done_for(partner_headers)
+    assert not await pending_for(auth_headers) and await pending_for(partner_headers)
+
+    await tick(partner_headers, True)
+    await tick(partner_headers, True)  # ticking twice is harmless
+    assert await done_for(auth_headers) and await done_for(partner_headers)
+
+    await tick(auth_headers, False)  # the creator unticks: the partner's tick stays
+    assert not await done_for(auth_headers) and await done_for(partner_headers)
+    assert await pending_for(auth_headers) and not await pending_for(partner_headers)
+
+    # renaming it does not change anyone's tick
+    await client.patch(f"{BASE}/calendar/reminders/{r['id']}", json={"title": "Mock test 2"}, headers=auth_headers)
+    assert not await done_for(auth_headers) and await done_for(partner_headers)
+
+
+@pytest.mark.asyncio
+async def test_attempts_analytics_and_revision_are_per_person(client, auth_headers, partner_headers):
+    s, _, test = await _subject_with_test(client, auth_headers, "common")
+    q = test["questions"][0]["id"]
+    partner_summary = await _get(client, "analytics/summary", partner_headers)
+    partner_attempts = await _get(client, "attempts/my", partner_headers)
+    partner_queue = await _get(client, "analytics/revision-queue", partner_headers)
+
+    # I fail the shared test
+    a = (await client.post(f"{BASE}/attempts/start", json={"test_id": test["id"]}, headers=auth_headers)).json()
+    await client.post(f"{BASE}/attempts/{a['attempt_id']}/submit", json={"answers": [{"question_id": q, "selected_options": ["b"]}]}, headers=auth_headers)
+
+    mine = {t["id"]: t for t in await _get(client, "tests/", auth_headers)}[test["id"]]
+    theirs = {t["id"]: t for t in await _get(client, "tests/", partner_headers)}[test["id"]]
+    assert mine["attempt_count"] == 1 and mine["needs_retry"] is True
+    assert theirs["attempt_count"] == 0 and theirs["needs_retry"] is False and theirs["best_percentage"] is None
+
+    assert a["attempt_id"] in [x["id"] for x in await _get(client, "attempts/my", auth_headers)]
+    assert await _get(client, "attempts/my", partner_headers) == partner_attempts
+    assert await _get(client, "analytics/summary", partner_headers) == partner_summary
+    assert await _get(client, "analytics/revision-queue", partner_headers) == partner_queue
+    assert (await client.get(f"{BASE}/attempts/{a['attempt_id']}/result", headers=partner_headers)).status_code == 404
+    partner_subject = next(x for x in await _get(client, "analytics/weak-areas", partner_headers) if x["id"] == s["id"])
+    assert partner_subject["percentage"] is None and partner_subject["attempts"] == 0
+
+    # my wrong answer is in my revision queue only, and my partner cannot resolve it
+    item = next(x for x in await _get(client, "analytics/revision-queue", auth_headers) if x["question_id"] == q)
+    assert (await client.patch(f"{BASE}/analytics/revision-queue/{item['id']}/resolve", headers=partner_headers)).status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_old_shared_tick_on_common_reminder_counts_for_nobody(client, auth_headers, partner_headers):
+    from sqlalchemy import update
+    from app.db.base import AsyncSessionLocal
+    from app.models.planner import Reminder
+    today = (await _get(client, "calendar", auth_headers))["today"]
+    ids = {}
+    for space in ("common", "private"):
+        res = await client.post(f"{BASE}/calendar/reminders", json={"title": f"old {space}", "date": today, "space": space}, headers=auth_headers)
+        ids[space] = res.json()["id"]
+    async with AsyncSessionLocal() as db:  # the single shared flag older versions wrote
+        await db.execute(update(Reminder).where(Reminder.id.in_(ids.values())).values(done=True))
+        await db.commit()
+    mine = {r["id"]: r["done"] for r in (await _get(client, "calendar", auth_headers))["reminders"]}
+    theirs = {r["id"]: r["done"] for r in (await _get(client, "calendar", partner_headers))["reminders"]}
+    assert mine[ids["common"]] is False and theirs[ids["common"]] is False
+    assert mine[ids["private"]] is True and ids["private"] not in theirs
