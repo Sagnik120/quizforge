@@ -25,6 +25,8 @@ class Settings(BaseSettings):
 
     # CORS
     BACKEND_CORS_ORIGINS: List[str] = ["http://localhost:3000"]
+    # Lets a phone on the same Wi-Fi open the app through this computer's LAN IP
+    BACKEND_CORS_ORIGIN_REGEX: str = r"http://(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+):3000"
 
     class Config:
         env_file = ".env"

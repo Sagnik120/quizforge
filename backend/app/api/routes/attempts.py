@@ -183,14 +183,21 @@ async def my_attempts(
     current_user: User = Depends(get_current_user),
 ):
     """List all completed attempts by the current user."""
-    query = select(Attempt).where(
+    query = select(Attempt, Test.name).join(Test, Test.id == Attempt.test_id).where(
         Attempt.user_id == current_user.id,
         Attempt.status == AttemptStatus.COMPLETED,
     ).order_by(Attempt.completed_at.desc())
     if test_id:
         query = query.where(Attempt.test_id == test_id)
     result = await db.execute(query)
-    return result.scalars().all()
+    # test_name lives on the test, not on the attempt row
+    return [
+        AttemptSummary(
+            id=a.id, test_id=a.test_id, test_name=name, score=a.score or 0, max_score=a.max_score or 0,
+            percentage=a.percentage or 0, status=a.status, started_at=a.started_at, completed_at=a.completed_at,
+        )
+        for a, name in result.all()
+    ]
 
 
 @router.get("/{attempt_id}/result", response_model=AttemptResult)

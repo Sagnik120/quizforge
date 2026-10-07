@@ -10,7 +10,7 @@ from app.api.deps import get_current_user
 from app.core.config import settings
 from app.models.user import User
 from app.models.attempt import Attempt, AttemptStatus
-from app.models.planner import Goal, GoalCheck, Reminder
+from app.models.planner import Goal, GoalCheck, Reminder, ReminderCheck
 from app.services.activity import activity_days, streaks, local_today
 
 router = APIRouter(tags=["Planner"])
@@ -74,18 +74,21 @@ async def _get_goal(goal_id: str, db: AsyncSession, user: User) -> Goal:
 
 @router.get("/goals", response_model=List[dict])
 async def list_goals(db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
-    """Flat list of goals you can see; `done_by` holds the ids of users who ticked each one."""
+    """Flat list of goals you can see; `done_by` holds the ids of users who ticked each one,
+    `my_done_at` when you ticked it yourself (UTC)."""
     goals = await _visible_goals(db, current_user)
-    done = {}
+    done, mine = {}, {}
     if goals:
         checks = await db.execute(
-            select(GoalCheck.goal_id, GoalCheck.user_id).where(GoalCheck.goal_id.in_([g.id for g in goals]))
+            select(GoalCheck.goal_id, GoalCheck.user_id, GoalCheck.done_at).where(GoalCheck.goal_id.in_([g.id for g in goals]))
         )
-        for goal_id, user_id in checks.all():
+        for goal_id, user_id, done_at in checks.all():
             done.setdefault(goal_id, []).append(user_id)
+            if user_id == current_user.id and done_at:
+                mine[goal_id] = done_at.isoformat()
     return [
         {"id": g.id, "parent_id": g.parent_id, "title": g.title, "space": g.space,
-         "owner_id": g.owner_id, "done_by": done.get(g.id, [])}
+         "owner_id": g.owner_id, "done_by": done.get(g.id, []), "my_done_at": mine.get(g.id)}
         for g in goals
     ]
 
@@ -172,9 +175,25 @@ class ReminderPatch(BaseModel):
     done: Optional[bool] = None
 
 
-def _reminder(r: Reminder) -> dict:
+def _reminder(r: Reminder, done: bool) -> dict:
     return {"id": r.id, "title": r.title, "note": r.note, "date": r.date.isoformat(),
-            "space": r.space, "done": bool(r.done), "owner_id": r.owner_id}
+            "space": r.space, "done": done, "owner_id": r.owner_id}
+
+
+async def _done_ids(db: AsyncSession, user: User, reminders: List[Reminder]) -> set:
+    """Ids of the reminders this user has ticked. A tick is personal, also on common reminders."""
+    if not reminders:
+        return set()
+    ticks = await db.execute(
+        select(ReminderCheck.reminder_id).where(
+            ReminderCheck.user_id == user.id, ReminderCheck.reminder_id.in_([r.id for r in reminders])
+        )
+    )
+    done = {row[0] for row in ticks.all()}
+    # Ticks made before per-person ticks existed: on a private reminder only the owner could
+    # have made it. On a common one we cannot know who did, so it counts for nobody.
+    done.update(r.id for r in reminders if r.done and r.space == "private" and r.owner_id == user.id)
+    return done
 
 
 async def _get_reminder(reminder_id: str, db: AsyncSession, user: User) -> Reminder:
@@ -205,13 +224,14 @@ async def calendar(month: Optional[str] = None, db: AsyncSession = Depends(get_d
             "current_streak": current, "longest_streak": longest,
             "active_days": sorted(d.isoformat() for d in days if first <= d <= last),
         })
-    reminders = await db.execute(
+    reminders = (await db.execute(
         select(Reminder)
         .where(_visible(Reminder, current_user), Reminder.date >= first, Reminder.date <= last)
         .order_by(Reminder.date, Reminder.created_at)
-    )
+    )).scalars().all()
+    done = await _done_ids(db, current_user, reminders)
     return {"today": today.isoformat(), "month": first.strftime("%Y-%m"), "users": users,
-            "reminders": [_reminder(r) for r in reminders.scalars().all()]}
+            "reminders": [_reminder(r, r.id in done) for r in reminders]}
 
 
 @router.post("/calendar/reminders", response_model=dict, status_code=201)
@@ -222,21 +242,33 @@ async def create_reminder(payload: ReminderIn, db: AsyncSession = Depends(get_db
                         space=payload.space, owner_id=current_user.id)
     db.add(reminder)
     await db.commit()
-    return _reminder(reminder)
+    return _reminder(reminder, False)
 
 
 @router.patch("/calendar/reminders/{reminder_id}", response_model=dict)
 async def update_reminder(reminder_id: str, payload: ReminderPatch, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
     reminder = await _get_reminder(reminder_id, db, current_user)
-    for key, value in payload.model_dump(exclude_unset=True).items():
+    changes = payload.model_dump(exclude_unset=True)
+    done = changes.pop("done", None)
+    for key, value in changes.items():
         setattr(reminder, key, value)
+    if done is not None:
+        # ticking only ever changes your own state, never your partner's
+        await db.execute(delete(ReminderCheck).where(
+            ReminderCheck.reminder_id == reminder.id, ReminderCheck.user_id == current_user.id))
+        if done:
+            db.add(ReminderCheck(reminder_id=reminder.id, user_id=current_user.id))
+        elif reminder.owner_id == current_user.id:
+            reminder.done = False
     await db.commit()
-    return _reminder(reminder)
+    return _reminder(reminder, reminder.id in await _done_ids(db, current_user, [reminder]))
 
 
 @router.delete("/calendar/reminders/{reminder_id}", status_code=204)
 async def delete_reminder(reminder_id: str, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
-    await db.delete(await _get_reminder(reminder_id, db, current_user))
+    reminder = await _get_reminder(reminder_id, db, current_user)
+    await db.execute(delete(ReminderCheck).where(ReminderCheck.reminder_id == reminder.id))
+    await db.delete(reminder)
     await db.commit()
 
 
@@ -277,12 +309,11 @@ async def overview(db: AsyncSession = Depends(get_db), current_user: User = Depe
             "private_goals": progress("private", person.id),
         })
 
-    upcoming = await db.execute(
+    upcoming = (await db.execute(
         select(Reminder)
-        .where(_visible(Reminder, current_user), Reminder.done == False,  # noqa: E712
-               Reminder.date <= today + timedelta(days=7))
+        .where(_visible(Reminder, current_user), Reminder.date <= today + timedelta(days=7))
         .order_by(Reminder.date)
-        .limit(8)
-    )
+    )).scalars().all()
+    done = await _done_ids(db, current_user, upcoming)
     return {"today": today.isoformat(), "people": people,
-            "reminders": [_reminder(r) for r in upcoming.scalars().all()]}
+            "reminders": [_reminder(r, False) for r in upcoming if r.id not in done][:50]}
