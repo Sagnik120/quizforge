@@ -3,12 +3,12 @@ import { useState } from "react";
 import Link from "next/link";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Plus, Trash2, Play, RotateCcw, Clock, HelpCircle } from "lucide-react";
+import { BookOpen, Plus, Trash2, Play, RotateCcw, Clock, HelpCircle } from "lucide-react";
 import { clsx } from "clsx";
 import { testsApi } from "@/lib/api";
 import { useAuthStore } from "@/lib/store";
 import { AppLayout } from "@/components/layout/AppLayout";
-import { Loader, SpaceTabs, useSpace, pctColor } from "@/components/ui";
+import { PageHeader, SkeletonCards, SpaceTabs, confirmDialog, useSpace, pctColor } from "@/components/ui";
 
 const FILTERS = [
   { id: "all", label: "All" },
@@ -44,22 +44,16 @@ export default function TestsPage() {
   return (
     <AppLayout>
       <div className="max-w-5xl mx-auto space-y-5">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">Tests</h1>
-            <p className="text-gray-500 mt-1">
-              {space === "common" ? "Shared tests — both of you can attempt these." : "Only you can see these."}
-            </p>
-          </div>
-          <Link href="/tests/new" className="btn-primary flex items-center gap-2"><Plus size={16} /> New test</Link>
-        </div>
+        <PageHeader icon={BookOpen} title="Tests"
+          subtitle={space === "common" ? "Shared tests. Both of you can attempt these." : "Only you can see these."}
+          action={<Link href="/tests/new" className="btn-primary flex items-center gap-2"><Plus size={16} /> New test</Link>} />
 
         <div className="flex flex-wrap items-center gap-3">
           <SpaceTabs />
-          <div className="flex gap-1.5">
+          <div className="flex gap-1.5 overflow-x-auto no-scrollbar -mx-4 px-4 sm:mx-0 sm:px-0 max-w-[100vw]">
             {FILTERS.map((f) => (
               <button key={f.id} onClick={() => setFilter(f.id)}
-                className={clsx("px-3 py-1 rounded-full text-xs font-medium border transition-colors",
+                className={clsx("shrink-0 px-3 py-1.5 rounded-full text-xs font-medium border transition-colors",
                   filter === f.id ? "bg-primary-500 border-primary-500 text-white" : "bg-white border-gray-200 text-gray-600 hover:border-primary-200")}>
                 {f.label} · {tests.filter((t) => matches(t, f.id)).length}
               </button>
@@ -67,7 +61,7 @@ export default function TestsPage() {
           </div>
         </div>
 
-        {isLoading ? <Loader label="Loading tests" /> : shown.length === 0 ? (
+        {isLoading ? <SkeletonCards /> : shown.length === 0 ? (
           <div className="card text-center text-gray-400 py-12">
             {tests.length === 0 ? "No tests here yet. Create one — by form, pasted JSON or a JSON file." : "Nothing matches this filter."}
           </div>
@@ -88,7 +82,7 @@ export default function TestsPage() {
                     </span>
                   </div>
 
-                  <div className="flex items-center gap-4 text-xs text-gray-500">
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-500">
                     <span className="flex items-center gap-1"><HelpCircle size={13} /> {t.total_questions} questions · {t.total_marks} marks</span>
                     <span className="flex items-center gap-1"><Clock size={13} /> {t.time_limit_minutes ? `${t.time_limit_minutes} min` : "No limit"}</span>
                   </div>
@@ -112,7 +106,9 @@ export default function TestsPage() {
                     </Link>
                     <span className="text-[11px] text-gray-400">by {t.creator_id === user?.id ? "you" : t.creator_name}</span>
                     <button aria-label="Delete test" className="p-2 text-gray-300 hover:text-red-500 transition-colors"
-                      onClick={() => { if (confirm(`Delete "${t.name}" and all its attempts?`)) remove.mutate(t.id); }}>
+                      onClick={async () => {
+                        if (await confirmDialog({ title: `Delete "${t.name}"?`, body: "All its attempts are deleted too.", confirmLabel: "Delete", danger: true })) remove.mutate(t.id);
+                      }}>
                       <Trash2 size={15} />
                     </button>
                   </div>

@@ -2,16 +2,19 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Plus, Trash2, CornerDownRight } from "lucide-react";
+import { ChevronDown, CornerDownRight, FolderOpen, Plus, Trash2 } from "lucide-react";
+import { clsx } from "clsx";
 import { subjectsApi } from "@/lib/api";
 import { AppLayout } from "@/components/layout/AppLayout";
-import { Loader, SpaceTabs, useSpace } from "@/components/ui";
+import { Empty, Loader, PageHeader, SpaceTabs, confirmDialog, useSpace } from "@/components/ui";
 import type { Subject, Topic } from "@/types";
 
 const COLORS = ["#6366f1", "#ec4899", "#f59e0b", "#22c55e", "#06b6d4", "#ef4444"];
 
-// A one-line "type and press Enter" input used for subjects, topics and sub-topics
-function QuickAdd({ placeholder, onAdd, small }: { placeholder: string; onAdd: (name: string) => void; small?: boolean }) {
+// "Type a name, press Enter". Stays open so several can be added in a row.
+function AddRow({ placeholder, onAdd, autoFocus, onClose }: {
+  placeholder: string; onAdd: (name: string) => void; autoFocus?: boolean; onClose?: () => void;
+}) {
   const [value, setValue] = useState("");
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -20,9 +23,10 @@ function QuickAdd({ placeholder, onAdd, small }: { placeholder: string; onAdd: (
     setValue("");
   };
   return (
-    <form onSubmit={submit} className="flex gap-2">
-      <input className={small ? "input !py-1 !text-xs" : "input"} value={value} onChange={(e) => setValue(e.target.value)} placeholder={placeholder} />
-      <button className={small ? "btn-secondary !px-2 !py-1" : "btn-primary"} aria-label="Add"><Plus size={small ? 13 : 16} /></button>
+    <form onSubmit={submit} className="flex gap-2 animate-in">
+      <input autoFocus={autoFocus} className="input" value={value} placeholder={placeholder}
+        onChange={(e) => setValue(e.target.value)} onKeyDown={(e) => e.key === "Escape" && onClose?.()} />
+      <button className="btn-primary !px-3 shrink-0" aria-label="Add" disabled={!value.trim()}><Plus size={18} /></button>
     </form>
   );
 }
@@ -31,6 +35,8 @@ export default function SubjectsPage() {
   const qc = useQueryClient();
   const { space } = useSpace();
   const [color, setColor] = useState(COLORS[0]);
+  const [open, setOpen] = useState<string | null>(null);
+  const [subFor, setSubFor] = useState<string | null>(null); // topic getting a sub-topic
 
   const { data: subjects = [], isLoading } = useQuery<Subject[]>({
     queryKey: ["subjects"],
@@ -48,65 +54,104 @@ export default function SubjectsPage() {
 
   const shown = subjects.filter((s) => s.space === space);
 
+  const remove = async (label: string, action: () => Promise<any>) => {
+    const ok = await confirmDialog({
+      title: `Delete "${label}"?`,
+      body: "Everything inside it is deleted too, including its tests and attempts.",
+      confirmLabel: "Delete", danger: true,
+    });
+    if (ok) run.mutate(action);
+  };
+
   const DeleteButton = ({ label, action }: { label: string; action: () => Promise<any> }) => (
-    <button aria-label={`Delete ${label}`} className="p-1 text-gray-300 hover:text-red-500 transition-colors"
-      onClick={() => { if (confirm(`Delete "${label}" with everything inside it (tests and attempts too)?`)) run.mutate(action); }}>
-      <Trash2 size={14} />
+    <button aria-label={`Delete ${label}`} className="p-2 rounded-lg text-gray-300 hover:text-red-500 hover:bg-red-50 transition-colors"
+      onClick={(e) => { e.stopPropagation(); remove(label, action); }}>
+      <Trash2 size={15} />
     </button>
   );
 
   return (
     <AppLayout>
-      <div className="max-w-4xl mx-auto space-y-5">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Subjects & Topics</h1>
-          <p className="text-gray-500 mt-1">Subject › Topic › Sub-topic. Tests attach to a topic or a sub-topic.</p>
-        </div>
+      <div className="max-w-3xl mx-auto space-y-5">
+        <PageHeader icon={FolderOpen} tint="bg-amber-50 text-amber-600" title="Subjects & Topics" subtitle="Subject › Topic › Sub-topic. Tests attach to a topic or a sub-topic." />
         <SpaceTabs />
 
+        {/* Step 1: a subject */}
         <div className="card space-y-3">
-          <QuickAdd placeholder={`New ${space} subject, e.g. DSA, DBMS, Aptitude`}
-            onAdd={(name) => run.mutate(() => subjectsApi.create({ name, color, space }))} />
-          <div className="flex gap-2">
+          <p className="section-title">New {space} subject</p>
+          <AddRow placeholder="e.g. DSA, DBMS, Aptitude"
+            onAdd={(name) => run.mutate(() => subjectsApi.create({ name, color, space }).then((r) => setOpen(r.data.id)))} />
+          <div className="flex items-center gap-2.5">
+            <span className="text-xs text-gray-500">Colour</span>
             {COLORS.map((c) => (
-              <button key={c} aria-label={`Colour ${c}`} onClick={() => setColor(c)}
-                className="w-5 h-5 rounded-full transition-transform hover:scale-125"
+              <button key={c} aria-label={`Colour ${c}`} aria-pressed={color === c} onClick={() => setColor(c)}
+                className="w-6 h-6 rounded-full transition-transform hover:scale-110 active:scale-95"
                 style={{ background: c, outline: color === c ? `2px solid ${c}` : "none", outlineOffset: 2 }} />
             ))}
           </div>
         </div>
 
         {isLoading ? <Loader label="Loading subjects" /> : shown.length === 0 ? (
-          <div className="card text-center text-gray-400 py-10">No {space} subjects yet.</div>
+          <Empty icon={FolderOpen} title={`No ${space} subjects yet`} hint="Add a subject above. Then open it to add topics, and sub-topics under each topic." />
         ) : (
-          <div className="grid md:grid-cols-2 gap-4 stagger">
+          <div className="space-y-3 stagger">
             {shown.map((s) => {
               const roots = s.topics.filter((t) => !t.parent_id);
               const kids = (t: Topic) => s.topics.filter((k) => k.parent_id === t.id);
+              const isOpen = open === s.id;
               return (
-                <div key={s.id} className="card lift space-y-3" style={{ borderTop: `3px solid ${s.color}` }}>
-                  <div className="flex items-center justify-between">
-                    <h3 className="font-semibold text-gray-900">{s.name}</h3>
+                <div key={s.id} className="card !p-0 overflow-hidden">
+                  {/* Subject row: tap to open */}
+                  <div role="button" tabIndex={0} aria-expanded={isOpen}
+                    onClick={() => setOpen(isOpen ? null : s.id)} onKeyDown={(e) => e.key === "Enter" && setOpen(isOpen ? null : s.id)}
+                    className="flex items-center gap-3 px-4 py-3.5 cursor-pointer hover:bg-gray-50 transition-colors">
+                    <span className="w-9 h-9 rounded-xl flex items-center justify-center text-white font-bold shrink-0" style={{ background: s.color }}>
+                      {s.name[0]?.toUpperCase()}
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold text-gray-900 truncate">{s.name}</p>
+                      <p className="text-xs text-gray-500">
+                        {roots.length} {roots.length === 1 ? "topic" : "topics"} · {s.topics.length - roots.length} sub-topics
+                      </p>
+                    </div>
                     <DeleteButton label={s.name} action={() => subjectsApi.delete(s.id)} />
+                    <ChevronDown size={18} className={clsx("text-gray-400 transition-transform", isOpen && "rotate-180")} />
                   </div>
-                  {roots.map((t) => (
-                    <div key={t.id} className="rounded-lg bg-gray-50 p-3 space-y-1.5">
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm font-medium text-gray-800">{t.name}</span>
-                        <DeleteButton label={t.name} action={() => subjectsApi.deleteTopic(s.id, t.id)} />
-                      </div>
-                      {kids(t).map((k) => (
-                        <div key={k.id} className="flex items-center justify-between pl-2 text-sm text-gray-600">
-                          <span className="flex items-center gap-1.5"><CornerDownRight size={12} className="text-gray-300" />{k.name}</span>
-                          <DeleteButton label={k.name} action={() => subjectsApi.deleteTopic(s.id, k.id)} />
+
+                  {isOpen && (
+                    <div className="border-t border-gray-100 bg-gray-50/60 p-3 sm:p-4 space-y-2 animate-in">
+                      {roots.length === 0 && <p className="text-sm text-gray-500 px-1">No topics yet. Add the first one below.</p>}
+                      {roots.map((t) => (
+                        <div key={t.id} className="rounded-xl bg-white border border-gray-100 p-2.5 pl-3.5" style={{ borderLeft: `3px solid ${s.color}` }}>
+                          <div className="flex items-center gap-1">
+                            <span className="flex-1 min-w-0 text-sm font-medium text-gray-800 break-words">{t.name}</span>
+                            <button onClick={() => setSubFor(subFor === t.id ? null : t.id)}
+                              className="flex items-center gap-1 text-xs font-medium text-primary-600 bg-primary-50 hover:bg-primary-100 px-2.5 py-1.5 rounded-full transition-colors shrink-0">
+                              <Plus size={12} /> Sub-topic
+                            </button>
+                            <DeleteButton label={t.name} action={() => subjectsApi.deleteTopic(s.id, t.id)} />
+                          </div>
+                          {kids(t).map((k) => (
+                            <div key={k.id} className="flex items-center gap-1.5 pl-1 text-sm text-gray-600">
+                              <CornerDownRight size={13} className="text-gray-300 shrink-0" />
+                              <span className="flex-1 min-w-0 break-words">{k.name}</span>
+                              <DeleteButton label={k.name} action={() => subjectsApi.deleteTopic(s.id, k.id)} />
+                            </div>
+                          ))}
+                          {subFor === t.id && (
+                            <div className="mt-2">
+                              <AddRow autoFocus placeholder={`Sub-topic under ${t.name}`} onClose={() => setSubFor(null)}
+                                onAdd={(name) => run.mutate(() => subjectsApi.createTopic(s.id, { name, parent_id: t.id }))} />
+                            </div>
+                          )}
                         </div>
                       ))}
-                      <QuickAdd small placeholder="Add sub-topic"
-                        onAdd={(name) => run.mutate(() => subjectsApi.createTopic(s.id, { name, parent_id: t.id }))} />
+                      <div className="pt-1">
+                        <AddRow placeholder={`Add a topic to ${s.name}`}
+                          onAdd={(name) => run.mutate(() => subjectsApi.createTopic(s.id, { name }))} />
+                      </div>
                     </div>
-                  ))}
-                  <QuickAdd small placeholder="Add topic"
-                    onAdd={(name) => run.mutate(() => subjectsApi.createTopic(s.id, { name }))} />
+                  )}
                 </div>
               );
             })}

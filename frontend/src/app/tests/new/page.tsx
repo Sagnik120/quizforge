@@ -1,4 +1,6 @@
 "use client";
+import { PageHeader } from "@/components/ui";
+import { PenSquare } from "lucide-react";
 import { useState, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { subjectsApi, testsApi } from "@/lib/api";
@@ -74,7 +76,7 @@ function TopicSelector({
 }) {
   const selectedSubject = subjects.find(s => s.id === subjectId);
   return (
-    <div className="grid grid-cols-2 gap-4">
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
       <div>
         <label className="label">Subject *</label>
         <select className="input" value={subjectId} onChange={e => { onSubjectChange(e.target.value); onTopicChange(""); }}>
@@ -450,8 +452,8 @@ export default function NewTestPage() {
     <AppLayout>
       <div className="max-w-3xl mx-auto">
         <div className="mb-6">
-          <h1 className="text-2xl font-bold text-gray-900">Create New Test</h1>
-          <p className="text-gray-500 mt-1">Fill the form, paste JSON, or upload a JSON file. Pick a common subject to share the test.</p>
+          <PageHeader icon={PenSquare} tint="bg-amber-50 text-amber-600" title="Create New Test"
+            subtitle="Fill the form, paste JSON, or upload a JSON file. Pick a common subject to share the test." />
         </div>
 
         <div className="flex gap-1 mb-6 bg-gray-100 p-1 rounded-xl w-fit">

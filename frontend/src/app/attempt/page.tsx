@@ -1,12 +1,12 @@
 "use client";
 import { useState, useEffect, useRef, Suspense } from "react";
-import { Loader } from "@/components/ui";
+import { Confetti, CountUp, Loader, Modal, PageHeader, ProgressBar, Ring } from "@/components/ui";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { testsApi, attemptsApi, subjectsApi } from "@/lib/api";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { useSearchParams, useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Clock, CheckCircle2, XCircle, AlertCircle, Play, ChevronLeft, ChevronRight } from "lucide-react";
+import { Clock, CheckCircle2, XCircle, AlertCircle, Play, ChevronLeft, ChevronRight, Lightbulb, PenLine, RotateCcw, BarChart2 } from "lucide-react";
 import { clsx } from "clsx";
 import { Subject, AttemptResult, QuestionPublic } from "@/types";
 
@@ -20,8 +20,7 @@ function TestSelector({ onSelect }: { onSelect: (id: string) => void }) {
 
   return (
     <div className="max-w-2xl mx-auto">
-      <h1 className="text-2xl font-bold text-gray-900 mb-2">Attempt a Test</h1>
-      <p className="text-gray-500 mb-6">Choose a subject, topic and test to begin</p>
+      <div className="mb-6"><PageHeader icon={PenLine} title="Attempt a Test" subtitle="Choose a subject, topic and test to begin" /></div>
 
       <div className="card space-y-4">
         <div>
@@ -69,13 +68,14 @@ function TestSelector({ onSelect }: { onSelect: (id: string) => void }) {
 }
 
 // ─── Test in progress ────────────────────────────────────
-function TestAttempt({ testId, onDone }: { testId: string; onDone: (result: AttemptResult) => void }) {
+function TestAttempt({ testId, onDone }: { testId: string; onDone: (result: AttemptResult, questions: QuestionPublic[]) => void }) {
   const router = useRouter();
   const [attemptId, setAttemptId] = useState<string | null>(null);
   const [currentQ, setCurrentQ] = useState(0);
   const [answers, setAnswers] = useState<Record<string, string[]>>({});
   const [timers, setTimers] = useState<Record<string, number>>({});
   const [elapsed, setElapsed] = useState(0);
+  const [reviewing, setReviewing] = useState(false);
   const startRef = useRef(Date.now());
   const qStartRef = useRef(Date.now());
 
@@ -96,7 +96,7 @@ function TestAttempt({ testId, onDone }: { testId: string; onDone: (result: Atte
       }));
       return attemptsApi.submit(attemptId!, ans).then(r => r.data);
     },
-    onSuccess: (result) => onDone(result),
+    onSuccess: (result) => onDone(result, test?.questions || []),
     onError: () => toast.error("Submission failed"),
   });
 
@@ -107,7 +107,7 @@ function TestAttempt({ testId, onDone }: { testId: string; onDone: (result: Atte
     return () => clearInterval(t);
   }, []);
 
-  if (!test || !attemptId) return <div className="text-center py-20 text-gray-400">Loading test...</div>;
+  if (!test || !attemptId) return <Loader label="Loading test" />;
 
   const questions: QuestionPublic[] = test.questions;
   const q = questions[currentQ];
@@ -128,26 +128,30 @@ function TestAttempt({ testId, onDone }: { testId: string; onDone: (result: Atte
     setCurrentQ(idx);
   };
 
+  const unanswered = questions.map((x, i) => ({ id: x.id, n: i + 1 })).filter((x) => !answers[x.id]?.length);
+  const answered = questions.length - unanswered.length;
+
   const formatTime = (s: number) => `${Math.floor(s / 60).toString().padStart(2, "0")}:${(s % 60).toString().padStart(2, "0")}`;
 
   return (
     <div className="max-w-3xl mx-auto">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h2 className="font-semibold text-gray-800">{test.name}</h2>
-          <p className="text-sm text-gray-500">Question {currentQ + 1} of {questions.length}</p>
+      <div className="sticky top-14 md:top-0 z-20 -mx-4 px-4 md:-mx-8 md:px-8 py-3 mb-4 bg-[#f6f8fc]/95 backdrop-blur flex items-center justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <h2 className="font-semibold text-gray-800 truncate">{test.name}</h2>
+          <p className="text-xs text-gray-500 mb-1.5">Question {currentQ + 1} of {questions.length} · {answered} answered</p>
+          <ProgressBar value={(answered / questions.length) * 100} color="#6366f1" className="!h-1.5" />
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 shrink-0">
           <span className="flex items-center gap-1.5 text-sm font-mono bg-gray-100 px-3 py-1.5 rounded-lg">
             <Clock size={14} /> {formatTime(elapsed)}
           </span>
           <button
-            onClick={() => { if (confirm("Submit test now?")) submitMutation.mutate(); }}
+            onClick={() => setReviewing(true)}
             className="btn-primary text-sm"
             disabled={submitMutation.isPending}
           >
-            {submitMutation.isPending ? "Submitting..." : "Submit Test"}
+            Submit
           </button>
         </div>
       </div>
@@ -159,7 +163,7 @@ function TestAttempt({ testId, onDone }: { testId: string; onDone: (result: Atte
             key={i}
             onClick={() => goTo(i)}
             className={clsx(
-              "w-8 h-8 rounded-lg text-xs font-medium transition-colors",
+              "w-9 h-9 rounded-lg text-xs font-medium transition-all active:scale-90",
               i === currentQ ? "bg-primary-500 text-white" :
               answers[questions[i].id]?.length ? "bg-green-100 text-green-700" :
               "bg-gray-100 text-gray-500 hover:bg-gray-200"
@@ -171,7 +175,7 @@ function TestAttempt({ testId, onDone }: { testId: string; onDone: (result: Atte
       </div>
 
       {/* Question card */}
-      <div className="card mb-4">
+      <div key={q.id} className="card mb-4 animate-in">
         <div className="flex items-center gap-2 mb-4">
           <span className={clsx("text-xs px-2.5 py-0.5 rounded-full font-medium", q.question_type === "MCQ" ? "bg-blue-100 text-blue-700" : "bg-purple-100 text-purple-700")}>
             {q.question_type}
@@ -188,7 +192,7 @@ function TestAttempt({ testId, onDone }: { testId: string; onDone: (result: Atte
               key={opt.id}
               onClick={() => toggleOption(opt.id)}
               className={clsx(
-                "w-full text-left flex items-start gap-3 p-3.5 rounded-xl border transition-all",
+                "w-full text-left flex items-start gap-3 p-3.5 rounded-xl border transition-all active:scale-[.99]",
                 selected.includes(opt.id)
                   ? "border-primary-400 bg-primary-50 text-primary-800"
                   : "border-gray-200 hover:border-gray-300 hover:bg-gray-50"
@@ -211,16 +215,55 @@ function TestAttempt({ testId, onDone }: { testId: string; onDone: (result: Atte
         <button onClick={() => goTo(currentQ - 1)} disabled={currentQ === 0} className="btn-secondary flex items-center gap-2 disabled:opacity-40">
           <ChevronLeft size={16} /> Previous
         </button>
-        <button onClick={() => goTo(currentQ + 1)} disabled={currentQ === questions.length - 1} className="btn-secondary flex items-center gap-2 disabled:opacity-40">
-          Next <ChevronRight size={16} />
-        </button>
+        {currentQ === questions.length - 1 ? (
+          <button onClick={() => setReviewing(true)} className="btn-primary flex items-center gap-2">
+            Review & submit <ChevronRight size={16} />
+          </button>
+        ) : (
+          <button onClick={() => goTo(currentQ + 1)} className="btn-primary flex items-center gap-2">
+            Next <ChevronRight size={16} />
+          </button>
+        )}
       </div>
+
+      {/* Review before submitting */}
+      {reviewing && (
+        <Modal onClose={() => !submitMutation.isPending && setReviewing(false)}>
+          <h3 className="text-lg font-semibold text-gray-900">Submit this test?</h3>
+          <p className="text-sm text-gray-500 mt-1">You cannot change answers after submitting.</p>
+          <div className="grid grid-cols-3 gap-2 text-center my-4">
+            <div className="rounded-xl bg-green-50 py-3"><p className="text-xl font-bold text-green-600">{answered}</p><p className="text-xs text-gray-500">answered</p></div>
+            <div className={clsx("rounded-xl py-3", unanswered.length ? "bg-amber-50" : "bg-gray-50")}>
+              <p className={clsx("text-xl font-bold", unanswered.length ? "text-amber-600" : "text-gray-400")}>{unanswered.length}</p><p className="text-xs text-gray-500">unanswered</p>
+            </div>
+            <div className="rounded-xl bg-gray-50 py-3"><p className="text-xl font-bold text-gray-700 font-mono">{formatTime(elapsed)}</p><p className="text-xs text-gray-500">time</p></div>
+          </div>
+          {unanswered.length > 0 && (
+            <div className="mb-4">
+              <p className="text-xs text-gray-500 mb-2">Unanswered. Tap a number to go back to it.</p>
+              <div className="flex flex-wrap gap-1.5">
+                {unanswered.map((x) => (
+                  <button key={x.id} onClick={() => { goTo(x.n - 1); setReviewing(false); }}
+                    className="w-9 h-9 rounded-lg text-xs font-medium bg-amber-50 text-amber-700 hover:bg-amber-100 transition-colors">{x.n}</button>
+                ))}
+              </div>
+            </div>
+          )}
+          <div className="flex gap-2">
+            <button className="btn-secondary flex-1" onClick={() => setReviewing(false)} disabled={submitMutation.isPending}>Keep going</button>
+            <button className="btn-primary flex-1" onClick={() => submitMutation.mutate()} disabled={submitMutation.isPending}>
+              {submitMutation.isPending ? "Submitting…" : "Submit test"}
+            </button>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }
 
 // ─── Result screen ───────────────────────────────────────
-function ResultScreen({ result, onRetry }: { result: AttemptResult; onRetry: () => void }) {
+function ResultScreen({ result, questions, onRetry }: { result: AttemptResult; questions: QuestionPublic[]; onRetry: () => void }) {
+  const [onlyMistakes, setOnlyMistakes] = useState(false);
   const router = useRouter();
   const pct = result.percentage;
   const color = pct >= 75 ? "text-green-600" : pct >= 50 ? "text-yellow-600" : "text-red-600";
@@ -228,14 +271,19 @@ function ResultScreen({ result, onRetry }: { result: AttemptResult; onRetry: () 
 
   return (
     <div className="max-w-2xl mx-auto">
-      <div className={`card text-center mb-6 ${bg} border-0`}>
-        <p className="text-5xl font-bold mb-2 mt-2">{pct >= 75 ? "🎉" : pct >= 50 ? "👍" : "📚"}</p>
-        <h2 className="text-xl font-bold text-gray-800 mb-1">{result.test_name}</h2>
-        <p className={`text-5xl font-bold mt-4 mb-2 ${color}`}>{pct.toFixed(1)}%</p>
-        <p className="text-gray-500">{result.score} / {result.max_score} marks</p>
+      <div className={`card relative overflow-hidden flex flex-col items-center text-center mb-6 ${bg} border-0 animate-in`}>
+        {pct >= 75 && <Confetti />}
+        <h2 className="text-lg font-bold text-gray-800 mb-3">{result.test_name}</h2>
+        <Ring size={132} stroke={11} value={pct}>
+          <span className={`text-3xl font-bold ${color}`}><CountUp value={Math.round(pct)} suffix="%" /></span>
+          <span className="text-[11px] text-gray-500">{result.score} / {result.max_score} marks</span>
+        </Ring>
+        <p className="text-sm text-gray-600 mt-3">
+          {pct >= 75 ? "Great work! This one is cleared." : pct >= 60 ? "Good. Review the mistakes below to lock it in." : "Go through the explanations below, then attempt it again."}
+        </p>
       </div>
 
-      <div className="grid grid-cols-3 gap-4 mb-6">
+      <div className="grid grid-cols-3 gap-2 sm:gap-4 mb-6 stagger">
         <div className="card text-center">
           <p className="text-2xl font-bold text-green-600">{result.correct_count}</p>
           <p className="text-xs text-gray-500 mt-1">Correct</p>
@@ -251,32 +299,67 @@ function ResultScreen({ result, onRetry }: { result: AttemptResult; onRetry: () 
       </div>
 
       <div className="flex gap-3 mb-6">
-        <button onClick={onRetry} className="btn-primary flex-1">Attempt Again</button>
-        <button onClick={() => router.push("/analytics")} className="btn-secondary flex-1">View Analytics</button>
+        <button onClick={onRetry} className="btn-primary flex-1 flex items-center justify-center gap-2"><RotateCcw size={15} /> Attempt again</button>
+        <button onClick={() => router.push("/analytics")} className="btn-secondary flex-1 flex items-center justify-center gap-2"><BarChart2 size={15} /> Analytics</button>
       </div>
 
-      {/* Answer review */}
+      {/* Answer review: the question, every option, what you chose and why */}
       <div className="card">
-        <h3 className="font-semibold text-gray-800 mb-4">Answer Review</h3>
-        <div className="space-y-4">
-          {result.answers.map((a, i) => (
-            <div key={a.question_id} className={clsx("p-4 rounded-xl", a.is_correct ? "bg-green-50" : a.selected_options.length ? "bg-red-50" : "bg-gray-50")}>
-              <div className="flex items-center gap-2 mb-1">
-                {a.is_correct ? <CheckCircle2 size={16} className="text-green-600" /> : a.selected_options.length ? <XCircle size={16} className="text-red-500" /> : <AlertCircle size={16} className="text-gray-400" />}
-                <span className="text-xs font-medium text-gray-500">Q{i + 1}</span>
-                <span className={clsx("text-xs font-semibold ml-auto", a.marks_awarded > 0 ? "text-green-700" : a.marks_awarded < 0 ? "text-red-700" : "text-gray-400")}>
-                  {a.marks_awarded > 0 ? "+" : ""}{a.marks_awarded}
-                </span>
-              </div>
-              <p className="text-xs text-gray-600">
-                Correct: <span className="text-green-700 font-medium">{a.correct_options.join(", ")}</span>
-                {a.selected_options.length > 0 && !a.is_correct && (
-                  <> · Your answer: <span className="text-red-600 font-medium">{a.selected_options.join(", ")}</span></>
+        <div className="flex items-center justify-between gap-3 mb-4">
+          <h3 className="font-semibold text-gray-800 flex items-center gap-2"><Lightbulb size={17} className="text-amber-500" /> Learn from this attempt</h3>
+          {result.wrong_count + result.unattempted_count > 0 && (
+            <button onClick={() => setOnlyMistakes(!onlyMistakes)}
+              className={clsx("text-xs font-medium px-3 py-1.5 rounded-full border transition-colors shrink-0",
+                onlyMistakes ? "bg-gray-900 border-gray-900 text-white" : "bg-white border-gray-200 text-gray-600")}>
+              Only mistakes
+            </button>
+          )}
+        </div>
+        <div className="space-y-4 stagger">
+          {result.answers.map((a, i) => ({ a, i })).filter(({ a }) => !onlyMistakes || !a.is_correct).map(({ a, i }) => {
+            const q = questions.find((x) => x.id === a.question_id);
+            const skipped = a.selected_options.length === 0;
+            return (
+              <div key={a.question_id} className={clsx("p-3.5 sm:p-4 rounded-2xl border", a.is_correct ? "border-green-100 bg-green-50/50" : skipped ? "border-gray-100 bg-gray-50" : "border-red-100 bg-red-50/40")}>
+                <div className="flex items-center gap-2 mb-2">
+                  {a.is_correct ? <CheckCircle2 size={16} className="text-green-600" /> : skipped ? <AlertCircle size={16} className="text-gray-400" /> : <XCircle size={16} className="text-red-500" />}
+                  <span className="text-xs font-medium text-gray-500">Q{i + 1} · {a.is_correct ? "Correct" : skipped ? "Skipped" : "Wrong"}</span>
+                  <span className={clsx("text-xs font-semibold ml-auto", a.marks_awarded > 0 ? "text-green-700" : a.marks_awarded < 0 ? "text-red-700" : "text-gray-400")}>
+                    {a.marks_awarded > 0 ? "+" : ""}{a.marks_awarded}
+                  </span>
+                </div>
+                {q ? (
+                  <>
+                    <p className="text-sm font-medium text-gray-800 mb-2.5 leading-relaxed">{q.text}</p>
+                    <div className="space-y-1.5">
+                      {q.options.map((o) => {
+                        const right = a.correct_options.includes(o.id);
+                        const chosen = a.selected_options.includes(o.id);
+                        return (
+                          <div key={o.id} className={clsx("flex items-start gap-2 text-sm rounded-lg px-2.5 py-1.5 border",
+                            right ? "bg-green-50 border-green-200 text-green-800" : chosen ? "bg-red-50 border-red-200 text-red-700" : "bg-white border-gray-100 text-gray-600")}>
+                            <span className="font-semibold uppercase shrink-0">{o.id}.</span>
+                            <span className="flex-1 min-w-0 break-words">{o.text}</span>
+                            <span className="text-[11px] font-medium shrink-0 mt-0.5">{right && chosen ? "your answer ✓" : right ? "correct" : chosen ? "your answer" : ""}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </>
+                ) : (
+                  <p className="text-xs text-gray-600">
+                    Correct: <span className="text-green-700 font-medium">{a.correct_options.join(", ")}</span>
+                    {!skipped && !a.is_correct && <> · Your answer: <span className="text-red-600 font-medium">{a.selected_options.join(", ")}</span></>}
+                  </p>
                 )}
-              </p>
-              {a.explanation && <p className="text-xs text-gray-500 mt-1 italic">{a.explanation}</p>}
-            </div>
-          ))}
+                {a.explanation && (
+                  <p className="flex items-start gap-2 text-sm text-amber-900 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2 mt-2.5">
+                    <Lightbulb size={15} className="text-amber-500 shrink-0 mt-0.5" /> <span>{a.explanation}</span>
+                  </p>
+                )}
+              </div>
+            );
+          })}
         </div>
       </div>
     </div>
@@ -289,6 +372,7 @@ function AttemptFlow() {
   const searchParams = useSearchParams();
   const [testId, setTestId] = useState<string | null>(searchParams.get("test_id"));
   const [result, setResult] = useState<AttemptResult | null>(null);
+  const [questions, setQuestions] = useState<QuestionPublic[]>([]);
   const [key, setKey] = useState(0);
 
   const handleRetry = () => { setResult(null); setKey(k => k + 1); };
@@ -301,10 +385,10 @@ function AttemptFlow() {
           key={`${testId}-${key}`}
           testId={testId}
           // a finished attempt changes scores, streaks and weak areas everywhere
-          onDone={(r) => { setResult(r); qc.invalidateQueries(); }}
+          onDone={(r, qs) => { setResult(r); setQuestions(qs); qc.invalidateQueries(); }}
         />
       )}
-      {result && <ResultScreen result={result} onRetry={handleRetry} />}
+      {result && <ResultScreen result={result} questions={questions} onRetry={handleRetry} />}
     </AppLayout>
   );
 }
